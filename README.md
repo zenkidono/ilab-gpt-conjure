@@ -1,7 +1,7 @@
 <h1 align="center">iLab GPT Conjure</h1>
 
 <p align="center">
-  <strong>Local-first AI image generation workbench for WebUI, CLI, prompt templates, and reusable reference workflows.</strong>
+  <strong>本地优先的 AI 图片生成工作台，支持 WebUI、CLI、提示词模板和可复用参考图工作流。</strong>
 </p>
 
 <p align="center">
@@ -22,57 +22,51 @@
 </p>
 
 
-iLab GPT Conjure is a local-first image generation workbench for prompt writing,
-reference image workflows, batch generation, task queues, and result archiving.
-It provides both a WebUI and a CLI.
+iLab GPT Conjure 是一个本地优先的图片生成工作台，提供 WebUI 和 CLI，
+面向提示词编写、参考图工作流、批量生成、任务队列和结果归档。
 
-The recommended public integration path is OpenAI-compatible API mode, using
-the Images API or Responses API shape provided by your configured provider.
+公开版推荐优先使用 OpenAI-compatible API 模式，通过你配置的供应商使用
+Images API 或 Responses API 形态。
 
-## Language
+## 语言
 
-[中文](README.zh-CN.md) | English
+中文 | [English](README.en.md)
 
-## Features
+## 功能
 
-- Text-to-image, reference-image generation, and image editing workflows.
-- Local task queue, status updates, history, thumbnails, and result archive.
-- Multiple outputs per task with partial-failure handling and retry controls.
-- Local gallery, recent reference images, color chips, prompt snippets, and
-  reusable prompt templates.
-- API provider profiles with configurable base URL, API key, image model, API
-  mode, and concurrency.
-- CLI support for generation, image references, image edits, masks, and dry runs.
+- 文生图、参考图生成和图像编辑工作流。
+- 本地任务队列、状态更新、历史记录、缩略图和结果归档。
+- 单任务多图输出、部分失败处理和失败重试。
+- 公用图库、最近参考图、颜色 chip、提示词片段和提示词模板。
+- API 供应商配置，支持 Base URL、API Key、图像模型、调用方式和并发上限。
+- CLI 支持生成、参考图、图像编辑、mask 和 dry-run。
 
-## Authentication modes
+## 认证模式
 
-### Recommended: OpenAI-compatible API
+### 推荐：OpenAI-compatible API
 
-Use this mode for stable integrations, shared workstations, team deployments, or
-anything that may become a public service. Configure the provider in the WebUI
-with a base URL, API key, model name, and API mode.
+稳定集成、团队使用、共享工作站或可能公开提供服务的场景，应使用 API 模式。
+你可以在 WebUI 中配置 Base URL、API Key、模型名和调用方式。
 
-### Advanced local mode: Codex / ChatGPT OAuth
+### 高级本机模式：Codex / ChatGPT OAuth
 
-This project can optionally reuse a local Codex / ChatGPT OAuth session to call
-an internal ChatGPT backend endpoint. This mode is provided for local personal
-workflows only.
+本项目可选复用本机 Codex / ChatGPT OAuth 登录态，调用 ChatGPT 内部后端接口。
+该模式只面向个人本机工作流。
 
-It is not an officially recommended OpenAI API integration path. The endpoint
-may change without notice, may stop working, and may be subject to account,
-product, or usage restrictions. For stable integrations, production usage,
-shared deployments, or public services, use OpenAI-compatible API mode instead.
+这不是 OpenAI 官方推荐的 API 集成方式。接口可能随时变更、失效，也可能受到
+账号、产品或用量规则影响。生产环境、团队部署、公开服务或需要稳定性的场景，
+应优先使用 OpenAI-compatible API 模式。
 
-Never commit OAuth files, API keys, local inputs, generated outputs, task
-metadata, SQLite databases, or debug logs.
+不要提交 OAuth 文件、API key、本地输入图、生成结果、任务 metadata、SQLite
+数据库或调试日志。
 
-## Requirements
+## 环境要求
 
-- Python 3.11 or newer.
-- WebUI dependencies from `requirements-webui.txt`.
-- Optional frontend tooling from `package.json` when editing TypeScript or CSS.
+- Python 3.11 或更高版本。
+- WebUI 依赖见 `requirements-webui.txt`。
+- 修改 TypeScript 或 CSS 时需要 `package.json` 中的前端工具。
 
-## Install
+## 安装
 
 ```bash
 git clone https://github.com/kadevin/ilab-gpt-conjure.git
@@ -81,132 +75,117 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-webui.txt
 ```
 
-## Start the WebUI
+## 启动 WebUI
 
-macOS:
+macOS：
 
 ```bash
 open "Start WebUI.command"
 ```
 
-Windows:
+Windows：
 
 ```text
 Start WebUI.bat
 ```
 
-Manual:
+手动启动：
 
 ```bash
 .venv/bin/python -m uvicorn codex_image.webui.app:app --host 127.0.0.1 --port 8787 --no-access-log
 ```
 
-Then open:
+然后打开：
 
 ```text
 http://127.0.0.1:8787/
 ```
 
-## Portable packages
+## 免安装一键包
 
-GitHub Releases may include portable packages named like:
+当前可用的一键包见 [下载 / Releases](RELEASES.md)，也可以直接打开
+[GitHub Release v0.1.0](https://github.com/kadevin/ilab-gpt-conjure/releases/tag/v0.1.0)。
 
-- `ilab-gpt-conjure_windows_portable_x64_<version>.zip`
-- `ilab-gpt-conjure_macos_portable_arm64_<version>.zip`
-- `ilab-gpt-conjure_macos_portable_x64_<version>.zip`
+这些包面向希望像 ComfyUI 一样“解压即用”的用户：
 
-These packages are intended for users who want a ComfyUI-style unzip-and-run
-experience:
+1. 从下载页选择对应平台的 portable zip。
+2. 解压到普通用户目录。
+3. Windows 双击 `Start WebUI Portable.bat`；macOS 双击
+   `Start WebUI Portable.command`。
+4. 如果浏览器没有自动打开，手动访问 `http://127.0.0.1:8787/`。
 
-1. Download the portable zip from the release assets.
-2. Extract it into a normal user directory.
-3. Run `Start WebUI Portable.bat` on Windows, or double-click
-   `Start WebUI Portable.command` on macOS.
-4. Open `http://127.0.0.1:8787/` if the browser does not open automatically.
+一键包内包含打包好的 CPython、已安装的 WebUI 依赖、应用源码、许可证文件，以及
+本地 `data/` 目录。设置、公用图库、输入图、输出图、任务数据库和日志都会写入
+`data/`。
 
-The portable package contains bundled CPython, installed WebUI dependencies,
-the app source, license files, and a local `data/` directory for settings,
-gallery files, inputs, outputs, task databases, and logs.
+Apple Silicon Mac 下载 `macos_portable_arm64`，Intel Mac 下载
+`macos_portable_x64`。
 
-Choose `macos_portable_arm64` for Apple Silicon Macs and
-`macos_portable_x64` for Intel Macs.
-
-The macOS packages are unsigned portable zips, not signed `.app` bundles or
-notarized DMGs, and they do not require an Apple Developer account to build. If
-macOS blocks the launcher after download, right-click or Control-click
-`Start WebUI Portable.command`, choose Open, then confirm Open again in the
-macOS security prompt. You can also remove quarantine from the extracted folder:
+macOS 包是未签名 portable zip，不是已签名 `.app` 或 notarized DMG；构建它
+不需要 Apple Developer 账号。如果 macOS 拦截下载后的启动脚本，可以右键或
+Control-click `Start WebUI Portable.command`，选择 Open，并在系统安全提示里
+再次确认 Open。也可以对解压目录执行：
 
 ```bash
 xattr -dr com.apple.quarantine /path/to/ilab-gpt-conjure_macos_portable_arm64
-# or:
+# 或：
 xattr -dr com.apple.quarantine /path/to/ilab-gpt-conjure_macos_portable_x64
 ```
 
-Do not commit portable package contents back to Git. API keys, OAuth files,
-local inputs, generated outputs, SQLite databases, and logs must stay local.
+不要把一键包里的 Python、依赖、API key、OAuth 文件、本地输入图、生成结果、
+SQLite 数据库或日志提交回 Git。
 
-Release packaging is intentionally separate from CI: the `Portable Release`
-workflow runs only after the `CI` workflow has completed successfully on a push
-to `main`, then uploads the zip and SHA256 file as workflow artifacts. If the
-commit is tagged with a `v*` tag, the same assets are uploaded to that GitHub
-Release. For a tagged commit that already passed CI, the same workflow can also
-be run manually with `ref` and `release_tag`.
+一键包打包和 CI 明确分离：`Portable Release` workflow 只会在 `CI` workflow 于
+`main` push 上成功完成后运行，并上传 zip 与 SHA256 文件作为 workflow artifact。
+如果该提交带有 `v*` tag，同一份文件会上传到对应 GitHub Release。对于已经通过
+CI 的 tag，也可以手动运行同一个 workflow，并填写 `ref` 与 `release_tag`。
 
-## WebUI usage
+## WebUI 使用说明
 
-1. Choose an authentication source from the top bar. Use `API` for the
-   recommended OpenAI-compatible mode, or the advanced local OAuth mode only for
-   a personal local workflow.
-2. Add reference images by upload, drag-and-drop, paste, recent uploads, or the
-   public gallery.
-3. Write the prompt directly, insert gallery/color/snippet chips when useful,
-   and choose the prompt mode: original, fidelity, or creative.
-4. Set image count, size, orientation, quality, output format, and compression.
-5. Start generation, track running and queued tasks in the left task list, then
-   review, select, retry, download, or archive results from the preview area.
+1. 在顶部选择认证来源。稳定使用建议选择 `API`，也就是 OpenAI-compatible
+   API 模式；本机 OAuth 模式只建议个人本地工作流使用。
+2. 添加参考图：支持上传、拖拽、粘贴、最近上传和公用图库。
+3. 编写提示词：可直接输入文本，也可插入图库、颜色和片段 chip，并选择原始、
+   保真或创意提示词模式。
+4. 设置数量、尺寸、方向、质量、输出格式和压缩率。
+5. 点击开始生成后，在左侧任务列表查看运行中和排队任务，在右侧预览区查看、
+   精选、重试、下载、打包或归档结果。
 
-## Public gallery
+## 公用图库（公共图库）
 
-The public gallery is a local reusable reference library for people, characters,
-products, brand assets, style references, and any image you want to reuse.
+公用图库是本地可复用参考图资源库，适合保存固定人物、角色设定、产品主图、
+品牌素材、风格参考和其他长期复用图片。
 
-- Save uploaded images, recent uploads, or generated results into the gallery.
-- Manage images in the right-side gallery drawer with categories, names, prompt
-  roles, reference notes, replacement images, deletion, and drag sorting.
-- Insert a gallery image into the current task from the gallery drawer or by
-  typing `@` in the prompt editor.
-- Gallery files stay local. Do not commit `input/`, `inputs/`, `output/`, or
-  `outputs/`. If a gallery item is later deleted, older tasks may show a missing
-  reference.
+- 上传图、最近上传图和生成结果都可以保存到公用图库。
+- 右侧图库抽屉支持分类、命名、提示词用途、引用备注、替换原图、删除和拖拽排序。
+- 可在图库抽屉中直接使用图片，也可以在提示词编辑器里输入 `@` 搜索并插入。
+- 图库文件只保存在本机。不要提交 `input/`、`inputs/`、`output/`、`outputs/`。
+  如果后续删除图库条目，旧任务可能显示缺失引用。
 
-## Prompt chips
+## 三种 chip
 
-The prompt editor supports three atomic chip types:
+提示词编辑器支持三种原子 chip：
 
-- `@` gallery chip: searches the public gallery, inserts the selected image into
-  reference inputs, and adds visible reference notes for the model.
-- `#` color chip: inserts a hexadecimal color value such as `#FF6600`; useful
-  for product, poster, brand, material, or background color constraints.
-- `~` snippet chip: inserts a saved prompt snippet by short tag. The editor keeps
-  the short tag visible, while the model prompt expands it to the full snippet
-  content.
+- `@` 图库 chip：搜索公用图库，将选中的图片同步加入参考图输入，并为模型附加
+  可见的参考图说明。
+- `#` 颜色 chip：插入 `#FF6600` 这类十六进制颜色，适合约束商品、海报、品牌、
+  材质或背景色。
+- `~` 提示词片段 chip：用短标签插入常用提示词片段。编辑器保持短标签可见，
+  提交给模型时会展开为完整片段内容。
 
-Snippet chips can be created from selected prompt text and can later be viewed,
-expanded into plain text, edited, or reused with `~`, `～`, or common tilde
-variants.
+提示词片段可以从选中文本收藏，之后可用 `~`、`～` 或常见波浪号变体再次调用；
+chip 支持查看完整内容、展开为正文、编辑和复用。
 
-## Prompt templates
+## 提示词模板
 
-Prompt templates are for longer reusable prompt structures, not short inline
-phrases. They are stored locally in `output/webui-prompt-templates.json`.
+提示词模板用于保存更长、可复用的生成结构，不是短句片段。模板默认保存在本机
+`output/webui-prompt-templates.json`。
 
-Use `Manage Prompt Templates` in the prompt area to search, filter by category,
-favorite, create, edit, copy, insert, replace, import, or export templates.
-Templates can use small thumbnails from historical results as visual cues.
+在提示词区域点击 `管理模板库`，可以搜索、按分类筛选、收藏、新建、编辑、复制、
+插入、替换、导入和导出模板。模板可以从历史任务结果中选择小缩略图辅助识别。
 
-Inserting a template writes into the visible prompt editor. Replacing a template
-overwrites the visible prompt text. Templates are not injected as hidden prompts.
+插入模板会写入当前可见提示词；替换模板会覆盖当前可见提示词。模板不会作为隐藏
+提示词注入。
 
 ## CLI
 
@@ -214,36 +193,33 @@ overwrites the visible prompt text. Templates are not injected as hidden prompts
 .venv/bin/python -m codex_image --prompt "A clean product photo of a ceramic mug" --out output/mug.png
 ```
 
-Use `--help` for all CLI options.
+更多参数请使用 `--help`。
 
-## Development
+## 开发
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 npm run check:webui
 ```
 
-When changing frontend TypeScript or CSS, commit the generated browser assets in
-`codex_image/webui/static/`.
+修改前端 TypeScript 或 CSS 时，需要提交生成后的浏览器资源：
+`codex_image/webui/static/`。
 
-GitHub CI runs the Python test suite and WebUI frontend checks on pull requests
-and pushes to `main`. Release packaging should run only after CI succeeds.
+GitHub CI 会在 pull request 和推送到 `main` 时运行 Python 测试和 WebUI 前端检查。
+后续 Release 一键包打包流程应接在 CI 成功之后。
 
-## License
+## 许可证
 
-This project is licensed under GNU AGPLv3. See `LICENSE`.
+本项目采用 GNU AGPLv3 协议。详见 `LICENSE`。
 
-If you modify this software and make it available to users over a network, you
-must also make the corresponding source code available under the same license.
+如果你修改本软件，并通过网络向用户提供服务，需要按照 AGPLv3 要求开放对应源码。
 
-This license applies to the software code. It does not grant rights to the
-project name, logo, personal assets, API credentials, user prompts, input
-images, output images, or model/API services used with the software.
+该许可证只适用于本项目代码，不授权项目名称、Logo、个人素材、API 凭据、用户
+提示词、输入图、输出图，或软件调用的模型/API 服务。
 
-## Contact
+## 联系作者
 
-Feel free to connect on WeChat to discuss AI programming, AI image generation,
-and local image generation workflows.
+欢迎添加微信交流 AI 编程、AI 生图和本地图片生成工作流经验。
 
 <p align="center">
   <img src="assets/wechat-qr.jpg" alt="iLab WeChat QR Code" width="240" />
