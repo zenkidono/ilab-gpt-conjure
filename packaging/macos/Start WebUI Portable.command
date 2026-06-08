@@ -1,6 +1,7 @@
 #!/bin/zsh
 set -e
 set -o pipefail
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
 BUNDLE_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="${BUNDLE_DIR}/app"
@@ -30,8 +31,9 @@ clear_macos_quarantine() {
   fi
 
   local needs_clear=0
-  for path in "$BUNDLE_DIR" "$PYTHON_FRAMEWORK" "$PYTHON_BIN"; do
-    if xattr -p com.apple.quarantine "$path" >/dev/null 2>&1; then
+  local bundle_path
+  for bundle_path in "$BUNDLE_DIR" "$PYTHON_FRAMEWORK" "$PYTHON_BIN"; do
+    if xattr -p com.apple.quarantine "$bundle_path" >/dev/null 2>&1; then
       needs_clear=1
       break
     fi
