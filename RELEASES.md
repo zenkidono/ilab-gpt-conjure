@@ -2,6 +2,10 @@
 
 当前正式版本：[v0.1.0](https://github.com/kadevin/ilab-gpt-conjure/releases/tag/v0.1.0)
 
+## 版本说明
+
+当前版本：`v0.1.0`。这个版本提供 Windows x64、macOS Apple Silicon、macOS Intel 三种免安装一键包；下载对应平台的 zip 后解压即可启动本地 WebUI。
+
 ## 免安装一键包
 
 | 平台 | 适用设备 | 下载 | SHA256 |

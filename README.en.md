@@ -29,6 +29,12 @@ It provides both a WebUI and a CLI.
 The recommended public integration path is OpenAI-compatible API mode, using
 the Images API or Responses API shape provided by your configured provider.
 
+Download portable packages from [Downloads / Releases](RELEASES.md).
+
+<p align="center">
+  <img src="assets/2026-06-08_09-50.png" alt="iLab GPT Conjure WebUI screenshot" width="960" />
+</p>
+
 ## Language
 
 [中文](README.md) | English

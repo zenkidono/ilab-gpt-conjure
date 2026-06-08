@@ -25,8 +25,18 @@
 iLab GPT Conjure 是一个本地优先的图片生成工作台，提供 WebUI 和 CLI，
 面向提示词编写、参考图工作流、批量生成、任务队列和结果归档。
 
+English: iLab GPT Conjure is a local-first AI image generation workbench for
+prompt writing, reference image workflows, batch generation, task queues, and
+result archiving.
+
 公开版推荐优先使用 OpenAI-compatible API 模式，通过你配置的供应商使用
 Images API 或 Responses API 形态。
+
+免安装一键包下载见 [下载 / Releases](RELEASES.md)。
+
+<p align="center">
+  <img src="assets/2026-06-08_09-50.png" alt="iLab GPT Conjure WebUI 截图" width="960" />
+</p>
 
 ## 语言
 
