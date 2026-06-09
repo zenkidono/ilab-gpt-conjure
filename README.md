@@ -27,7 +27,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/2026-06-08_09-50.png" alt="iLab GPT Conjure WebUI 截图" width="960" />
+  <img src="assets/UI_cn.png" alt="iLab GPT Conjure WebUI 截图" width="960" />
 </p>
 
 ## 简介
