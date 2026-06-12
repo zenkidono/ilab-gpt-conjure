@@ -2178,6 +2178,14 @@
     updateTaskSelectionVisuals();
     renderBulkToolbar();
   }
+  function clearHistoryTaskSelection({ updateVisuals = true } = {}) {
+    if (!historyState.selectedTaskIds.size && !historyState.selectionAnchorTaskId && !historyState.deleteConfirming) return;
+    historyState.selectedTaskIds.clear();
+    historyState.selectionAnchorTaskId = "";
+    historyState.deleteConfirming = false;
+    if (updateVisuals) updateTaskSelectionVisuals();
+    renderBulkToolbar();
+  }
   function toggleHistoryTaskSelection(taskId, anchor = true) {
     if (!taskId) return;
     const next = new Set(historyState.selectedTaskIds);
@@ -2446,6 +2454,7 @@
   function renderBulkToolbar() {
     if (!els.bulkToolbar || !els.bulkCount) return;
     const count = historyState.selectedTaskIds.size;
+    els.page?.classList.toggle("history-bulk-selecting", count > 0);
     els.bulkToolbar.classList.toggle("hidden", count === 0);
     els.bulkToolbar.toggleAttribute("hidden", count === 0);
     els.bulkCount.textContent = count ? formatTranslation("history.selectedCount", { count }) : "";
@@ -2707,6 +2716,7 @@
       const taskButton = target?.closest("[data-history-task-id]");
       if (taskButton) {
         if (handleHistoryTaskShortcutSelection(taskButton.dataset.historyTaskId || "", event)) return;
+        clearHistoryTaskSelection({ updateVisuals: false });
         void loadTaskDetail(taskButton.dataset.historyTaskId || "");
         return;
       }

@@ -105,6 +105,12 @@
   display: grid;
 }
 
+.task-list > .task-group-expanded > .task-group-header-split {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+}
+
 .task-group-title {
   min-width: 0;
   display: inline-flex;

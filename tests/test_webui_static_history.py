@@ -102,6 +102,8 @@ class WebUIStaticHistoryTests(unittest.TestCase):
             "history-view-grid",
             "history-view-list",
             "renderBulkToolbar()",
+            "history-bulk-selecting",
+            'els.page?.classList.toggle("history-bulk-selecting", count > 0)',
             "archiveSelectedTasks",
             "deleteSelectedTasks",
             "trimMountedTaskCards(position === \"prepend\" ? \"bottom\" : \"top\")",
@@ -122,6 +124,7 @@ class WebUIStaticHistoryTests(unittest.TestCase):
             "historyState.selectedTaskIds",
             "visibleHistoryTaskIds",
             "applyHistoryTaskSelection",
+            "clearHistoryTaskSelection",
             "toggleHistoryTaskSelection",
             "selectHistoryTaskRange",
             "handleHistoryTaskShortcutSelection",
@@ -158,6 +161,11 @@ class WebUIStaticHistoryTests(unittest.TestCase):
             "catch (error)",
         ]:
             self.assertIn(marker, source)
+
+        self.assertRegex(
+            source,
+            r"if \(taskButton\) \{[\s\S]*handleHistoryTaskShortcutSelection\(taskButton\.dataset\.historyTaskId \|\| \"\", event\)[\s\S]*clearHistoryTaskSelection\(\{ updateVisuals: false \}\);[\s\S]*loadTaskDetail\(taskButton\.dataset\.historyTaskId \|\| \"\"\)",
+        )
 
         for marker in [
             "export type HistoryWindowDirection",
@@ -327,10 +335,15 @@ class WebUIStaticHistoryTests(unittest.TestCase):
         self.assertNotRegex(styles, r"\.history-load-sentinel\s*\{[^}]*cursor:\s*pointer")
         self.assertNotIn(".history-window-notice", styles)
         self.assertRegex(styles, r"\.history-task-list\.history-view-grid \.history-task-meta span:not\(\[data-history-meta-kind=\"size\"\]\)\s*\{[^}]*display:\s*none")
+        self.assertRegex(styles, r"\.history-page\.history-bulk-selecting \.history-toolbar-actions\s*\{[^}]*visibility:\s*hidden")
+        self.assertRegex(styles, r"\.history-page\.history-bulk-selecting \.history-toolbar-actions\s*\{[^}]*pointer-events:\s*none")
         self.assertRegex(styles, r"\.history-bulk-toolbar\s*\{[^}]*position:\s*absolute")
         self.assertRegex(styles, r"\.history-bulk-toolbar\s*\{[^}]*top:\s*18px")
         self.assertRegex(styles, r"\.history-bulk-toolbar\s*\{[^}]*right:\s*18px")
+        self.assertRegex(styles, r"\.history-bulk-toolbar\s*\{[^}]*justify-content:\s*flex-start")
+        self.assertRegex(styles, r"\.history-bulk-toolbar\s*\{[^}]*width:\s*max-content")
         self.assertRegex(styles, r"\.history-bulk-toolbar\s*\{[^}]*box-shadow:\s*var\(--shadow-popover\)")
+        self.assertRegex(styles, r"\.history-bulk-toolbar\s*>\s*\.segmented-indicator\s*\{[^}]*display:\s*none")
         self.assertIn(".history-lightbox", styles)
         self.assertIn(':root[data-theme="dark"] .history-task-card.selected', styles)
 

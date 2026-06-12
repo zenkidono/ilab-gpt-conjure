@@ -232,6 +232,11 @@
   gap: 8px;
 }
 
+.history-page.history-bulk-selecting .history-toolbar-actions {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .history-view-toggle {
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(58px, 1fr));
@@ -280,16 +285,25 @@
   z-index: 8;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 10px;
+  width: max-content;
   max-width: calc(100% - 36px);
   min-height: 44px;
-  padding: 8px 10px;
+  padding: 8px;
   border: 1px solid var(--panel-border);
   border-radius: var(--radius);
   background: var(--primary-light);
   color: var(--primary-strong);
   box-shadow: var(--shadow-popover);
+}
+
+.history-bulk-toolbar > .segmented-indicator {
+  display: none;
+}
+
+#historyBulkCount {
+  flex: 0 0 auto;
 }
 
 .history-task-list {
@@ -1019,6 +1033,7 @@
   .history-bulk-toolbar {
     left: 18px;
     right: 18px;
+    width: auto;
     max-width: none;
     flex-wrap: wrap;
   }

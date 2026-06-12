@@ -650,6 +650,15 @@ function applyHistoryTaskSelection(taskIds: string[], anchorTaskId = ""): void {
   renderBulkToolbar();
 }
 
+function clearHistoryTaskSelection({ updateVisuals = true } = {}): void {
+  if (!historyState.selectedTaskIds.size && !historyState.selectionAnchorTaskId && !historyState.deleteConfirming) return;
+  historyState.selectedTaskIds.clear();
+  historyState.selectionAnchorTaskId = "";
+  historyState.deleteConfirming = false;
+  if (updateVisuals) updateTaskSelectionVisuals();
+  renderBulkToolbar();
+}
+
 function toggleHistoryTaskSelection(taskId: string, anchor = true): void {
   if (!taskId) return;
   const next = new Set(historyState.selectedTaskIds);
@@ -945,6 +954,7 @@ function applyFilter(key: HistoryFilterKey, value: string): void {
 function renderBulkToolbar(): void {
   if (!els.bulkToolbar || !els.bulkCount) return;
   const count = historyState.selectedTaskIds.size;
+  els.page?.classList.toggle("history-bulk-selecting", count > 0);
   els.bulkToolbar.classList.toggle("hidden", count === 0);
   els.bulkToolbar.toggleAttribute("hidden", count === 0);
   els.bulkCount.textContent = count ? formatTranslation("history.selectedCount", { count }) : "";
@@ -1222,6 +1232,7 @@ function bindEvents(): void {
     const taskButton = target?.closest<HTMLElement>("[data-history-task-id]");
     if (taskButton) {
       if (handleHistoryTaskShortcutSelection(taskButton.dataset.historyTaskId || "", event)) return;
+      clearHistoryTaskSelection({ updateVisuals: false });
       void loadTaskDetail(taskButton.dataset.historyTaskId || "");
       return;
     }
