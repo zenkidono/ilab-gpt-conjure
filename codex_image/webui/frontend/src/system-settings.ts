@@ -144,6 +144,21 @@ export function closeSystemSettingsModal(): void {
   (els.systemSettingsModal as HTMLElement | null)?.style.removeProperty("--system-settings-modal-top");
 }
 
+export function openSystemSettingsFromUrl(): void {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("settings") !== "1") return;
+  const requestedTab = params.get("settingsTab") || params.get("tab");
+  const settingsTab = requestedTab && VALID_TABS.has(requestedTab as SystemSettingsTab)
+    ? requestedTab
+    : "";
+  openSystemSettingsModal(settingsTab || "api");
+  const url = new URL(window.location.href);
+  url.searchParams.delete("settings");
+  url.searchParams.delete("settingsTab");
+  url.searchParams.delete("tab");
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 function handleSystemSettingsTabClick(event: Event): void {
   const target = event.target as HTMLElement | null;
   const button = target?.closest?.("[data-system-settings-tab]") as HTMLElement | null;
@@ -165,6 +180,7 @@ export function initSystemSettingsFeature(): void {
   Object.assign(getLegacyBridge().methods, {
     setSystemSettingsTab,
     openSystemSettingsModal,
+    openSystemSettingsFromUrl,
     closeSystemSettingsModal,
   });
 }

@@ -41,4 +41,5 @@ export function bootWebUI(state: WebUIState, els: WebUIElements, methods: Legacy
   call(methods, "startUiClock");
   call(methods, "updateRequestPreview");
   call(methods, "setupPreviewPanelHeightSync");
+  call(methods, "openSystemSettingsFromUrl");
 }

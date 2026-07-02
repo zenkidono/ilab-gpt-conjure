@@ -29,12 +29,19 @@ stable integrations.
 ## Portable updater behavior
 
 Portable startup launchers only start the local WebUI server and open the local
-browser URL. They do not contact GitHub and do not update files automatically.
+browser URL by default. They contact GitHub only when the user chooses the
+update check action from the tray/menu-bar menu.
 
-Portable update scripts are manually run. They fetch GitHub Release metadata and
-the matching portable zip, verify the published SHA256 file, preserve local
-`data/`, only replace package-managed files inside the extracted portable
-folder, and keep backups under `.backup/`.
+Standard app packages in 0.5.5 do not self-replace app files. Their update check
+opens the GitHub Release page so the user can manually download a new standard
+package.
+
+Portable update scripts can be started by the launcher after user confirmation,
+or run manually from the extracted package. They fetch the published signed
+`latest.json` update manifest and the matching portable zip, verify the Ed25519
+manifest signature and manifest SHA256, preserve local `data/`, only replace
+package-managed files inside the extracted portable folder, keep backups under
+`.backup/`, and restart the launcher when started in automatic mode.
 
 ## Reporting issues
 

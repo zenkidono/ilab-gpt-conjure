@@ -71,8 +71,9 @@ export function bindWebUIEvents(state: WebUIState, els: WebUIElements, methods: 
   els.authSourceGroup?.addEventListener("click", (event: Event) => call(methods, "handleAuthSourceClick", event));
   els.apiSourceSettingsButton?.addEventListener("click", () => call(methods, "openApiSettingsModal"));
   els.apiDirectSettingsButton?.addEventListener("click", () => call(methods, "openApiSettingsModal"));
-  els.saveApiSettingsButton?.addEventListener("click", () => call(methods, "saveApiSettings"));
-  els.saveCodexSettingsButton?.addEventListener("click", () => call(methods, "saveApiSettings"));
+  els.codexModeNotes?.forEach?.((note: HTMLElement) => {
+    note.addEventListener("click", () => call(methods, "selectCodexMode", note.dataset.codexModeNote));
+  });
   els.apiProviderQuick?.addEventListener("change", () => {
     call(methods, "selectApiProvider", els.apiProviderQuick?.value || call(methods, "currentApiProviderId"));
   });
@@ -103,7 +104,10 @@ export function bindWebUIEvents(state: WebUIState, els: WebUIElements, methods: 
       call(methods, "renderAuthSource", state.authStatus);
       call(methods, "updateModeSpecificSettings");
       call(methods, "updateRequestPreview");
+      call(methods, "syncCodexModeNotes");
+      call(methods, "queueApiSettingsAutosave");
     });
+    element?.addEventListener("change", () => call(methods, "syncCodexModeNotes"));
   });
   call(methods, "bindOverlayPopoverEvents");
   els.runButton.addEventListener("click", () => call(methods, "runTask"));

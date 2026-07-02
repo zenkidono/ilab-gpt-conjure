@@ -14,10 +14,14 @@ class WebUIStaticI18nTests(WebUIStaticTestCase):
 
         self.assertIn('const LOCALE_STORAGE_KEY = "codex-image-locale-preference";', html)
         self.assertIn("function detectPreferredLocale", html)
+        self.assertIn("async function readStoredLocalePreference", html)
+        self.assertIn("function persistLocalePreference", html)
+        self.assertIn('fetch("/api/settings")', html)
+        self.assertIn('body: JSON.stringify({ locale: currentLocale })', html)
         self.assertIn("navigator.languages", html)
         self.assertIn('const valid = new Set(["zh-CN", "zh-TW", "zh-HK", "ja", "ko", "en", "es", "pt", "fr", "de", "ru", "it", "hi"]);', html)
-        self.assertRegex(html, r"document\.documentElement\.lang = locale;")
-        self.assertRegex(html, r"document\.documentElement\.dataset\.locale = locale;")
+        self.assertRegex(html, r"document\.documentElement\.lang = currentLocale;")
+        self.assertRegex(html, r"document\.documentElement\.dataset\.locale = currentLocale;")
         self.assertNotIn('id="languageSwitcher"', html)
         self.assertNotIn('id="languageSelect"', nav_actions)
         self.assertLess(nav_actions.index('id="themeSwitcher"'), nav_actions.index('id="githubLink"'))
@@ -103,6 +107,10 @@ class WebUIStaticI18nTests(WebUIStaticTestCase):
         self.assertIn('const LOCALE_STORAGE_KEY = "codex-image-locale-preference";', source)
         self.assertIn('import { DEFAULT_LOCALE, DICTIONARIES, LOCALES } from "./i18n/dictionaries";', source)
         self.assertIn("export function detectPreferredLocale", source)
+        self.assertIn("async function readStoredLocalePreference", source)
+        self.assertIn("function persistLocalePreference", source)
+        self.assertIn('fetch("/api/settings")', source)
+        self.assertIn('body: JSON.stringify({ locale: currentLocale })', source)
         self.assertIn("navigator.languages", source)
         self.assertIn('language.startsWith("zh-hk")', source)
         self.assertIn('language.startsWith("ja")', source)
@@ -272,7 +280,8 @@ class WebUIStaticI18nTests(WebUIStaticTestCase):
             "apiSettings.sortProviders",
             "apiSettings.sortProviderStatus",
             "apiSettings.saveProvider",
-            "apiSettings.saveSelection",
+            "apiSettings.autoSaving",
+            "apiSettings.autoSaved",
             "apiSettings.cancelEdit",
             "apiSettings.deleteProviderTitle",
             "apiSettings.deleteProviderMessage",
@@ -362,7 +371,8 @@ class WebUIStaticI18nTests(WebUIStaticTestCase):
         self.assertIn('translate("preview.stage")', runtime_sources["preview"])
         self.assertIn('translate("apiSettings.modeImagesShort")', runtime_sources["api_settings"])
         self.assertIn('translate("apiSettings.saveProvider")', runtime_sources["api_settings"])
-        self.assertIn('translate("apiSettings.saveSelection")', runtime_sources["api_settings"])
+        self.assertIn('translate("apiSettings.autoSaving")', runtime_sources["api_settings"])
+        self.assertIn('translate("apiSettings.autoSaved")', runtime_sources["api_settings"])
         self.assertIn('translate("apiSettings.deleteProviderTitle")', runtime_sources["api_settings"])
         self.assertIn('formatTranslation("apiSettings.deleteProviderMessage"', runtime_sources["api_settings"])
         self.assertIn('translate("settings.status")', runtime_sources["storage"])

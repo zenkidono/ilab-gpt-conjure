@@ -2,6 +2,11 @@
 setlocal
 
 set "SCRIPT=%~dp0Update WebUI Portable.ps1"
+set "AUTO_MODE=0"
+
+for %%A in (%*) do (
+  if /I "%%~A"=="-AutoInstall" set "AUTO_MODE=1"
+)
 
 if not exist "%SCRIPT%" (
   echo Update helper was not found at %SCRIPT%.
@@ -9,7 +14,7 @@ if not exist "%SCRIPT%" (
   exit /b 1
 )
 
-powershell -NoProfile -File "%SCRIPT%"
+powershell -NoProfile -File "%SCRIPT%" %*
 set "EXIT_CODE=%ERRORLEVEL%"
 
 if "%EXIT_CODE%"=="0" (
@@ -18,6 +23,10 @@ if "%EXIT_CODE%"=="0" (
 ) else (
   echo.
   echo Update failed with exit code %EXIT_CODE%.
+)
+
+if "%AUTO_MODE%"=="1" (
+  exit /b %EXIT_CODE%
 )
 
 pause

@@ -85,6 +85,24 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 9px 19px rgba(51, 93, 77, 0.18);
 }
 
+.brand-rabbit-logo {
+  color: #ffffff;
+  fill: currentColor;
+  filter: drop-shadow(0 1px 0 rgba(16, 32, 27, 0.18));
+}
+
+.brand-rabbit-cutout {
+  fill: #457b66;
+}
+
+.brand-rabbit-spark {
+  color: var(--dark-accent, #d3b776);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.55;
+  stroke-linecap: round;
+}
+
 .brand-title {
   min-width: 0;
   display: grid;

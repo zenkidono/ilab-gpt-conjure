@@ -330,6 +330,7 @@ class WebUIStaticTaskTests(WebUIStaticTestCase):
             "export function initTaskBatchControlsFeature",
             "function toggleBatchMode(",
             "function toggleBatchTaskSelection(",
+            "function syncBatchTaskSelectionVisuals(",
             "function renderBatchToolbar()",
             "async function archiveSelectedTasks()",
             "function openBatchDeleteConfirm()",
@@ -375,8 +376,15 @@ class WebUIStaticTaskTests(WebUIStaticTestCase):
         self.assertIn("summary_only: true", Path("codex_image/webui/frontend/src/tasks.ts").read_text(encoding="utf-8"))
         self.assertIn("prompt: String(task.prompt_preview || task.task_id || \"\")", Path("codex_image/webui/frontend/src/tasks.ts").read_text(encoding="utf-8"))
         self.assertIn("thumbnail_urls: task.thumbnail_url ? [String(task.thumbnail_url)] : []", Path("codex_image/webui/frontend/src/tasks.ts").read_text(encoding="utf-8"))
+        self.assertIn('taskSearchHistoryResultQuery: ""', Path("codex_image/webui/frontend/src/state-defaults.ts").read_text(encoding="utf-8"))
+        self.assertIn("function normalizedTaskSearchResultQuery", Path("codex_image/webui/frontend/src/tasks.ts").read_text(encoding="utf-8"))
+        self.assertIn("state.taskSearchHistoryResultQuery = normalizedTaskSearchResultQuery(query)", Path("codex_image/webui/frontend/src/tasks.ts").read_text(encoding="utf-8"))
+        self.assertIn("state.taskSearchHistoryResultQuery = \"\"", Path("codex_image/webui/frontend/src/tasks.ts").read_text(encoding="utf-8"))
         self.assertIn('"sidebar.searchPlaceholder": "搜索提示词或任务 ID"', script)
         self.assertIn('"sidebar.searchPlaceholder": "Search prompts or task ID"', script)
+        self.assertIn("state.taskSearchHistoryResultQuery", script)
+        self.assertIn("function taskSearchHistoryResultMatches", script)
+        self.assertIn("state.taskSearchHistoryResultIds || []).some", script)
         self.assertRegex(script, r"const text = `\$\{task\.task_id \|\| \"\"\} \$\{task\.prompt")
     def test_sidebar_new_task_button_is_compact_brand_action(self) -> None:
         html = Path("codex_image/webui/static/index.html").read_text(encoding="utf-8")
@@ -418,7 +426,9 @@ class WebUIStaticTaskTests(WebUIStaticTestCase):
         self.assertIn('formatTranslation("taskGroup.expand"', script)
         self.assertIn('formatTranslation("taskGroup.collapse"', render_source)
         self.assertIn('class="task-group-count-separator"', script)
-        self.assertRegex(script, r"const tasks = visibleTasks\.filter\(\(task(?:: any)?\) => \{[\s\S]*return text\.includes\(query\);[\s\S]*\}\);")
+        self.assertIn("function taskSearchHistoryResultMatches", script)
+        self.assertIn("state.taskSearchHistoryResultQuery", script)
+        self.assertIn("return text.includes(normalizedQuery)", script)
         self.assertIn('task.task_id || ""', script)
         self.assertRegex(styles, r"\.task-history-anchor-row\s*,[\s\S]*\.task-group-header-split\s*\{[^}]*display:\s*grid")
         self.assertRegex(styles, r"\.task-history-anchor-row\s*,[\s\S]*\.task-group-header-split\s*\{[^}]*background:\s*var\(--surface\)")
@@ -668,6 +678,11 @@ class WebUIStaticTaskTests(WebUIStaticTestCase):
         self.assertIn("function taskCardProviderLabel", script)
         self.assertIn("taskApiProviderLabel(task)", script)
         self.assertIn("taskApiProviderId(task)", script)
+        self.assertIn('if (backend === "codex_images") return "Codex Image";', script)
+        self.assertIn('if (backend === "codex_responses") return "Codex Responses";', script)
+        self.assertIn('if (backend === "openai_images") return "API Image";', script)
+        self.assertIn('if (backend === "openai_responses") return "API Responses";', script)
+        self.assertNotIn('if (backend === "codex_responses") return "Responses";', script)
         self.assertIn("task-image-progress", script)
         self.assertIn('class="task-image-summary"', script)
         self.assertIn('class="task-card-time"', script)
@@ -2264,6 +2279,7 @@ class WebUIStaticTaskTests(WebUIStaticTestCase):
         self.assertRegex(styles, r"\.archive-modal-panel\s*\{[^}]*width:\s*min\(520px,\s*94vw\)")
     def test_batch_mode_supports_drag_marquee_selection(self) -> None:
         script = self._frontend_script_source()
+        batch_source = self._task_batch_controls_source()
         styles = Path("codex_image/webui/static/styles.css").read_text(encoding="utf-8")
 
         self.assertIn("batchSelectionDrag: null", script)
@@ -2273,10 +2289,27 @@ class WebUIStaticTaskTests(WebUIStaticTestCase):
         self.assertIn("function handleTaskListPointerDown", script)
         self.assertIn("function updateBatchMarqueeSelection", script)
         self.assertIn("function applyBatchSelectionPreview", script)
+        self.assertIn("function syncBatchTaskSelectionVisuals", script)
         self.assertIn("batch-selection-marquee", script)
         self.assertIn('els.taskList?.classList.toggle("batch-marquee-enabled", state.batchMode)', script)
         self.assertIn("card.getBoundingClientRect()", script)
         self.assertIn("rectsIntersect(selectionRect, cardRect)", script)
+        toggle_body = re.search(
+            r"function toggleBatchTaskSelection\(taskId: any\) \{[\s\S]*?\n\}",
+            batch_source,
+        )
+        self.assertIsNotNone(toggle_body)
+        self.assertIn("syncBatchTaskSelectionVisuals();", toggle_body.group(0))
+        self.assertNotIn("renderTasks", toggle_body.group(0))
+        apply_body = re.search(
+            r"function applyBatchTaskSelection\(taskIds: any\[], anchorTaskId: any = null\) \{[\s\S]*?\n\}",
+            batch_source,
+        )
+        self.assertIsNotNone(apply_body)
+        self.assertIn("const wasBatchMode = Boolean(state.batchMode);", apply_body.group(0))
+        self.assertIn("renderTasks({ preserveScroll: true })", apply_body.group(0))
+        self.assertIn("syncBatchTaskSelectionVisuals();", apply_body.group(0))
+        self.assertIn("renderTasks({ preserveScroll: true })", batch_source)
         self.assertRegex(styles, r"\.batch-selection-marquee\s*\{[^}]*position:\s*fixed")
         self.assertRegex(styles, r"\.batch-selection-marquee\s*\{[^}]*pointer-events:\s*none")
         self.assertRegex(styles, r"\.task-list\.batch-marquee-enabled\s+\.task-card\.batch-mode\s*\{[^}]*cursor:\s*crosshair")

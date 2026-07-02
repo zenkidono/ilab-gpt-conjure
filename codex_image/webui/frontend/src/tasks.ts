@@ -27,6 +27,10 @@ const TASK_SEARCH_HISTORY_LIMIT = 100;
 const TASK_SEARCH_HISTORY_DEBOUNCE_MS = 180;
 let taskSearchHistoryTimerId = 0;
 
+function normalizedTaskSearchResultQuery(query: string): string {
+  return String(query || "").trim().toLowerCase();
+}
+
 async function refreshTasks({ migrateLegacyArchives = false }: any = {}) {
   const requestSeq = ++state.tasksRequestSeq;
   const response = await fetch("/api/tasks/recent?limit=200");
@@ -113,7 +117,7 @@ function historyTaskSummaryToSidebarTask(task: any) {
   };
 }
 
-function mergeTaskSearchHistoryResults(tasks: any[]) {
+function mergeTaskSearchHistoryResults(tasks: any[], query: string) {
   const previousResultIds = new Set((state.taskSearchHistoryResultIds || []).map(String));
   const nextTasks = tasks.map(historyTaskSummaryToSidebarTask).filter((task) => task.task_id);
   const nextById = new Map(nextTasks.map((task) => [String(task.task_id), task]));
@@ -140,6 +144,7 @@ function mergeTaskSearchHistoryResults(tasks: any[]) {
   });
   state.tasks = merged;
   state.taskSearchHistoryResultIds = Array.from(nextIds);
+  state.taskSearchHistoryResultQuery = normalizedTaskSearchResultQuery(query);
   state.tasksRenderKey = null;
 }
 
@@ -151,6 +156,7 @@ function clearTaskSearchHistoryResults() {
     return !previousResultIds.has(taskId) || activeOrSelectedTask(task);
   });
   state.taskSearchHistoryResultIds = [];
+  state.taskSearchHistoryResultQuery = "";
   state.tasksRenderKey = null;
 }
 
@@ -163,7 +169,7 @@ async function fetchTaskSearchHistoryResults(query: string, requestSeq: number) 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.detail || "Task history search failed");
   if (requestSeq !== state.taskSearchHistoryRequestSeq || currentTaskSearchQuery() !== query) return;
-  mergeTaskSearchHistoryResults(Array.isArray(data.tasks) ? data.tasks : []);
+  mergeTaskSearchHistoryResults(Array.isArray(data.tasks) ? data.tasks : [], query);
   renderTasks({ preserveScroll: true });
 }
 

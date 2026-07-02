@@ -42,7 +42,8 @@ management.
 The recommended public integration path is OpenAI-compatible API mode, using
 the Images API or Responses API shape provided by your configured provider.
 
-Download portable packages from [Downloads / Releases](RELEASES.md).
+Download standard app packages and portable transition packages from
+[Downloads / Releases](RELEASES.md).
 
 ## Features
 
@@ -69,8 +70,14 @@ Download portable packages from [Downloads / Releases](RELEASES.md).
   Language tab, and Storage & Notifications tabs.
 - API provider cards for fast selection, read-only details by default, explicit
   editing, provider copy, delete confirmation, and multi-provider sorting.
-- Portable startup launchers stay local-only; update scripts are run manually,
-  verify SHA256, preserve `data/`, and keep replaced files under `.backup/`.
+- Standard macOS DMG and Windows App ZIP packages with a rabbit tray/menu-bar
+  launcher, Open WebUI / Settings / History Library actions, system-language
+  menu labels, native About window, and confirmed legacy portable data copy on
+  first launch.
+- Portable transition packages keep local `data/` next to the app and support
+  user-confirmed automatic replacement through the signed `latest.json`
+  manifest, Ed25519 signature verification, SHA256 checks, `.backup/`, and
+  launcher restart.
 - Advanced local OAuth mode for personal Codex workflows, with clear risk
   warnings and no account-usage probing.
 - API provider profiles with configurable base URL, API key, image model, API
@@ -142,19 +149,37 @@ Then open:
 http://127.0.0.1:8787/
 ```
 
-## Portable packages
+## App packages
 
-Download the current portable packages from [Downloads / Releases](RELEASES.md),
-or open [GitHub Release v0.5.4](https://github.com/kadevin/ilab-gpt-conjure/releases/tag/v0.5.4)
+Download the current packages from [Downloads / Releases](RELEASES.md), or open
+[GitHub Release v0.5.5](https://github.com/kadevin/ilab-gpt-conjure/releases/tag/v0.5.5)
 directly.
 
-These packages are intended for users who want a ComfyUI-style unzip-and-run
-experience:
+New users should choose the standard packages:
+
+1. macOS: download `iLab-GPT-CONJURE-macos-arm64-0.5.5.dmg`
+   for Apple Silicon or `iLab-GPT-CONJURE-macos-x64-0.5.5.dmg`
+   for Intel, then drag `iLab GPT CONJURE.app` to Applications.
+2. Windows: download `iLab-GPT-CONJURE-windows-x64_0.5.5.zip`,
+   extract it into a normal user directory, and run `iLab GPT CONJURE.exe`.
+
+Standard packages store user data in `~/Library/Application Support/iLab GPT
+CONJURE` on macOS and `%APPDATA%\iLab GPT CONJURE` on Windows. On first launch,
+the app can detect adjacent legacy portable data and asks before copying it. The
+old `data/` folder is not moved or deleted, and existing standard data is never
+overwritten automatically.
+
+v0.5.4 and earlier portable users should manually download a full standard package or a full portable package for the first 0.5.5 upgrade. The old updater only guarantees WebUI/dependency updates and may not install the new rabbit launcher, standard `.app` / `.exe` entry, or migration assistant.
+
+Portable packages remain available for old users, debugging, and users who want
+a ComfyUI-style unzip-and-run experience:
 
 1. Download the portable zip for your platform from the release page.
 2. Extract it into a normal user directory.
-3. Run `Start WebUI Portable.bat` on Windows, or double-click
-   `Start WebUI Portable.command` on macOS.
+3. Run `Start iLab GPT CONJURE.exe` on Windows, or double-click
+   `Start iLab GPT CONJURE.app` on macOS. The legacy
+   `Start WebUI Portable.bat` / `Start WebUI Portable.command` scripts remain
+   available for terminal-based troubleshooting.
 4. Open `http://127.0.0.1:8787/` if the browser does not open automatically.
 
 The portable package contains bundled CPython, installed WebUI dependencies,
@@ -166,24 +191,25 @@ Portable startup launchers do not run `npm install` or rebuild frontend assets.
 Node.js is only needed if you intentionally edit TypeScript or CSS and rebuild
 the static WebUI assets from source.
 
-To update an extracted portable package, close the WebUI server window and run
-`Update WebUI Portable.bat` on Windows or `Update WebUI Portable.command` on
-macOS. Startup launchers do not contact GitHub or update files automatically.
-The updater downloads the latest matching GitHub Release asset, prints the
-selected asset and SHA256 file before making changes, verifies its SHA256 file,
-preserves `data/`, only replaces package-managed files inside the portable
-folder, and saves replaced files under `.backup/`.
+Portable startup launchers do not contact GitHub automatically. To update an
+extracted portable package, choose Check for Updates from the tray/menu-bar menu
+and confirm Install Update, or quit the launcher and run
+`Update WebUI Portable.bat` on Windows / `Update WebUI Portable.command` on
+macOS manually.
+The updater reads the published signed `latest.json` manifest, verifies its
+Ed25519 signature with the launcher public key, downloads the latest matching
+GitHub Release asset, prints the selected asset and manifest SHA256 before
+making changes, verifies the downloaded zip against that SHA256, preserves
+`data/`, only replaces package-managed files inside the portable folder, and
+saves replaced files under `.backup/`.
 
 Choose `macos_portable_arm64` for Apple Silicon Macs and
 `macos_portable_x64` for Intel Macs.
 
-The macOS packages are unsigned portable zips, not signed `.app` bundles or
-notarized DMGs, and they do not require an Apple Developer account to build.
-The launcher tries to remove quarantine attributes from its own extracted folder
-before starting the bundled Python framework. If macOS still blocks the launcher
-after download, right-click or Control-click `Start WebUI Portable.command`,
-choose Open, then confirm Open again in the macOS security prompt. You can also
-remove quarantine from the extracted folder:
+The standard macOS DMG and macOS portable zips are unsigned and not notarized in
+0.5.5. If macOS blocks the app after download, right-click or Control-click the
+app, choose Open, then confirm Open again in the macOS security prompt. For
+portable zips, you can also remove quarantine from the extracted folder:
 
 ```bash
 xattr -dr com.apple.quarantine /path/to/ilab-gpt-conjure_macos_portable_arm64
@@ -196,10 +222,13 @@ local inputs, generated outputs, SQLite databases, and logs must stay local.
 
 Release packaging is intentionally separate from CI: the `Portable Release`
 workflow runs only after the `CI` workflow has completed successfully on a push
-to `main`, then uploads the zip and SHA256 file as workflow artifacts. If the
-commit is tagged with a `v*` tag, the same assets are uploaded to that GitHub
-Release. For a tagged commit that already passed CI, the same workflow can also
-be run manually with `ref` and `release_tag`.
+to `main`, then builds standard packages, portable packages, and SHA256 files as
+workflow artifacts. If the commit is tagged with a `v*` tag, the release job
+also builds signed portable-only `latest.json` using the
+`ILAB_CONJURE_UPDATE_SIGNING_PRIVATE_KEY_B64` secret and uploads all packages,
+SHA256 files, and the update manifest to that GitHub Release. For a tagged
+commit that already passed CI, the same workflow can also be run manually with
+`ref` and `release_tag`.
 
 ## WebUI usage
 

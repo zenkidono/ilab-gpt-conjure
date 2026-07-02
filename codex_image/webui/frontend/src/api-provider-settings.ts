@@ -15,6 +15,7 @@ import { closeSystemSettingsModal, openSystemSettingsModal } from "./system-sett
 const bridge = getLegacyBridge();
 const state = bridge.state;
 const els = bridge.els;
+let apiSettingsAutosaveTimerId: number | null = null;
 
 function legacyMethod(name: string, ...args: any[]): any {
   const method = getLegacyBridge().methods[name];
@@ -362,6 +363,7 @@ export function populateApiSettingsForm(): void {
   if (els.codexMode) {
     els.codexMode.value = currentCodexMode();
     els.codexMode.dispatchEvent(new Event("change"));
+    syncCodexModeNotes();
   }
   if (els.apiProviderQuick) {
     els.apiProviderQuick.innerHTML = "";
@@ -464,8 +466,9 @@ export function deleteApiProvider(): void {
   if (state.apiSettings.providers.length <= 1) state.apiProviderSortMode = false;
   populateApiSettingsForm();
   persistApiSettings();
-  setApiSettingsFeedback(translate("apiSettings.deleteProviderStatus"), "running");
   renderAuthSourceAfterProviderChange();
+  setApiSettingsFeedback(translate("apiSettings.deleteProviderStatus"), "running");
+  queueApiSettingsAutosave();
 }
 
 export function confirmDeleteApiProvider(anchor: any = els.deleteApiProviderButton): void {
@@ -516,6 +519,7 @@ export function selectApiProvider(providerId: any): void {
   populateApiSettingsForm();
   persistApiSettings();
   renderAuthSourceAfterProviderChange();
+  queueApiSettingsAutosave();
 }
 
 export function editApiProvider(): void {
@@ -568,6 +572,7 @@ export function moveApiProvider(providerId: any, direction: any): void {
   persistApiSettings();
   renderApiProviderList();
   setApiSettingsFeedback(translate("apiSettings.sortProviderStatus"), "running");
+  queueApiSettingsAutosave();
 }
 
 export async function saveApiProviderEdit(): Promise<void> {
@@ -603,7 +608,52 @@ export function apiModeLabel(mode: any): string {
 }
 
 export function codexModeLabel(mode: any): string {
-  return mode === "responses" ? "Responses" : "Image";
+  return mode === "responses" ? "Codex Responses" : "Codex Image";
+}
+
+function backendDisplayLabel(backend: string): string {
+  if (backend === "codex_images") return "Codex Image";
+  if (backend === "codex_responses") return "Codex Responses";
+  if (backend === "openai_images") return "API Image";
+  if (backend === "openai_responses") return "API Responses";
+  return backend;
+}
+
+function backendModeLabel(backend: string): string {
+  if (backend === "codex_images" || backend === "openai_images") return "Image";
+  if (backend === "codex_responses" || backend === "openai_responses") return "Responses";
+  return "";
+}
+
+export function syncCodexModeNotes(): void {
+  const mode = currentCodexMode();
+  els.codexModeNotes?.forEach?.((note: HTMLElement) => {
+    const active = note.dataset.codexModeNote === mode;
+    note.classList.toggle("active", active);
+    note.setAttribute("aria-current", active ? "true" : "false");
+  });
+}
+
+export function selectCodexMode(mode: any): void {
+  const normalized = normalizeCodexMode(mode);
+  if (els.codexMode) {
+    els.codexMode.value = normalized;
+    els.codexMode.dispatchEvent(new Event("input", { bubbles: true }));
+    els.codexMode.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  syncCodexModeNotes();
+}
+
+export function queueApiSettingsAutosave(): void {
+  if (apiProviderEditorActive()) return;
+  if (apiSettingsAutosaveTimerId !== null) {
+    window.clearTimeout(apiSettingsAutosaveTimerId);
+  }
+  setApiSettingsFeedback(translate("apiSettings.autoSaving"), "running");
+  apiSettingsAutosaveTimerId = window.setTimeout(() => {
+    apiSettingsAutosaveTimerId = null;
+    void saveApiSettings({ auto: true });
+  }, 260);
 }
 
 export function backendForAuthSource(authSource: any, apiMode: any = currentApiMode(), codexMode: any = currentCodexMode()): string {
@@ -645,7 +695,11 @@ export function taskApiProviderLabel(task: any): string {
 export function taskBackendLabel(task: any): string {
   const backend = taskBackendValue(task);
   const provider = taskApiProviderLabel(task);
-  return [backend, provider].filter(Boolean).join(" · ");
+  const backendLabel = backendDisplayLabel(backend);
+  if (provider && backend.startsWith("openai_")) {
+    return [provider, backendModeLabel(backend)].filter(Boolean).join(" · ");
+  }
+  return [backendLabel, provider].filter(Boolean).join(" · ");
 }
 
 export function setApiSettingsFeedback(message: any, type: any = ""): void {
@@ -656,7 +710,7 @@ export function setApiSettingsFeedback(message: any, type: any = ""): void {
 }
 
 function saveButtons(): any[] {
-  return [els.saveApiSettingsButton, els.saveCodexSettingsButton, els.saveApiProviderEditButton].filter(Boolean);
+  return [els.saveApiProviderEditButton].filter(Boolean);
 }
 
 function setSaveButtonsDisabled(disabled: boolean): void {
@@ -664,36 +718,23 @@ function setSaveButtonsDisabled(disabled: boolean): void {
 }
 
 function setSaveButtonText(stateName: "saving" | "saved" | "failed" | "default"): void {
-  const apiText = {
-    saving: translate("apiSettings.saving"),
-    saved: translate("apiSettings.savedShort"),
-    failed: translate("apiSettings.saveFailedShort"),
-    default: translate("apiSettings.saveSelection"),
-  }[stateName];
   const providerText = {
     saving: translate("apiSettings.saving"),
     saved: translate("apiSettings.savedShort"),
     failed: translate("apiSettings.saveFailedShort"),
     default: translate("apiSettings.saveProvider"),
   }[stateName];
-  const codexText = {
-    saving: translate("apiSettings.saving"),
-    saved: translate("apiSettings.savedShort"),
-    failed: translate("apiSettings.saveFailedShort"),
-    default: translate("codexSettings.save"),
-  }[stateName];
-  if (els.saveApiSettingsButton) els.saveApiSettingsButton.textContent = apiText;
   if (els.saveApiProviderEditButton) els.saveApiProviderEditButton.textContent = providerText;
-  if (els.saveCodexSettingsButton) els.saveCodexSettingsButton.textContent = codexText;
 }
 
-export async function saveApiSettings(): Promise<void> {
-  if (!saveButtons().length) return;
+export async function saveApiSettings(options: any = {}): Promise<void> {
+  const autoSave = Boolean(options.auto);
+  if (autoSave && apiProviderEditorActive()) return;
   if (state.apiSettingsSaveTimerId) {
     window.clearTimeout(state.apiSettingsSaveTimerId);
     state.apiSettingsSaveTimerId = null;
   }
-  const settings = readApiSettingsForm({ applyProviderDraft: true });
+  const settings = readApiSettingsForm({ applyProviderDraft: !autoSave });
   persistApiSettings();
   const payload: any = {
     codex_mode: settings.codex_mode,
@@ -714,9 +755,11 @@ export async function saveApiSettings(): Promise<void> {
       return item;
     }),
   };
-  setSaveButtonsDisabled(true);
-  setSaveButtonText("saving");
-  setApiSettingsFeedback(translate("apiSettings.savingStatus"), "running");
+  if (!autoSave) {
+    setSaveButtonsDisabled(true);
+    setSaveButtonText("saving");
+  }
+  setApiSettingsFeedback(translate(autoSave ? "apiSettings.autoSaving" : "apiSettings.savingStatus"), "running");
   try {
     const response = await fetch("/api/api-settings", {
       method: "PATCH",
@@ -731,16 +774,16 @@ export async function saveApiSettings(): Promise<void> {
     state.apiProviderDraftIsNew = false;
     persistApiSettings();
     populateApiSettingsForm();
-    setApiSettingsFeedback(formatTranslation("apiSettings.savedSummary", {
+    setApiSettingsFeedback(autoSave ? translate("apiSettings.autoSaved") : formatTranslation("apiSettings.savedSummary", {
       codex: codexModeLabel(currentCodexMode()),
       provider: activeApiProvider().name,
       mode: apiModeLabel(currentApiMode()),
       model: currentApiImageModel(),
       concurrency: currentApiImagesConcurrency(),
     }), "ok");
-    setSaveButtonText("saved");
+    if (!autoSave) setSaveButtonText("saved");
     state.apiSettingsSaveTimerId = window.setTimeout(() => {
-      setSaveButtonText("default");
+      if (!autoSave) setSaveButtonText("default");
       state.apiSettingsSaveTimerId = null;
     }, 1600);
     setStatus(translate("apiSettings.savedStatus"), "ok");
@@ -748,15 +791,11 @@ export async function saveApiSettings(): Promise<void> {
     updateRequestPreview();
   } catch (error: any) {
     setApiSettingsFeedback(error.message || translate("apiSettings.saveFailed"), "error");
-    setSaveButtonText("failed");
+    if (!autoSave) setSaveButtonText("failed");
     setStatus(error.message || translate("apiSettings.saveFailed"), "error");
   } finally {
-    setSaveButtonsDisabled(false);
-    if (!state.apiSettingsSaveTimerId && (
-      els.saveApiSettingsButton?.textContent !== translate("apiSettings.saveSelection")
-      || els.saveApiProviderEditButton?.textContent !== translate("apiSettings.saveProvider")
-      || els.saveCodexSettingsButton?.textContent !== translate("codexSettings.save")
-    )) {
+    if (!autoSave) setSaveButtonsDisabled(false);
+    if (!autoSave && !state.apiSettingsSaveTimerId && els.saveApiProviderEditButton?.textContent !== translate("apiSettings.saveProvider")) {
       state.apiSettingsSaveTimerId = window.setTimeout(() => {
         setSaveButtonText("default");
         state.apiSettingsSaveTimerId = null;

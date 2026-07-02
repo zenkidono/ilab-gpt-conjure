@@ -344,9 +344,20 @@ function taskFilterValues() {
   };
 }
 
+function taskSearchHistoryResultMatches(taskId: string, query: string) {
+  if (!taskId || !query) return false;
+  if (String(state.taskSearchHistoryResultQuery || "") !== query) return false;
+  return (state.taskSearchHistoryResultIds || []).some((id: any) => String(id) === taskId);
+}
+
 function taskMatchesSearch(task: any, query: any) {
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  const taskId = String(task?.task_id || "");
+  if (taskSearchHistoryResultMatches(taskId, normalizedQuery)) {
+    return true;
+  }
   const text = `${task.task_id || ""} ${task.prompt || ""} ${task.status || ""} ${task.mode || ""} ${taskBackendLabel(task)}`.toLowerCase();
-  return text.includes(query);
+  return text.includes(normalizedQuery);
 }
 
 function taskMatchesFilters(task: any, filters: any) {
@@ -1036,16 +1047,19 @@ function taskCardCompletionTimeText(task: any) {
 function taskCardProviderLabel(task: any) {
   const providerLabel = String(taskApiProviderLabel(task) || "").trim();
   const providerId = String(taskApiProviderId(task) || "").trim();
+  const backend = String(task?.backend || task?.requested_backend || "").trim();
+  const channel = backend === "openai_responses" ? "Responses" : backend === "openai_images" ? "Image" : "";
   if (providerLabel && (!providerId || providerLabel !== providerId)) {
     const providerIdSuffix = providerId ? `(${providerId})` : "";
-    return providerIdSuffix && providerLabel.endsWith(providerIdSuffix)
+    const label = providerIdSuffix && providerLabel.endsWith(providerIdSuffix)
       ? providerLabel.slice(0, -providerIdSuffix.length).trim()
       : providerLabel;
+    return [label, channel].filter(Boolean).join(" · ");
   }
-  const backend = String(task?.backend || task?.requested_backend || "").trim();
-  if (backend === "codex_images") return "Codex";
-  if (backend === "codex_responses") return "Responses";
-  if (backend === "openai_responses") return "Responses";
+  if (backend === "codex_images") return "Codex Image";
+  if (backend === "codex_responses") return "Codex Responses";
+  if (backend === "openai_images") return "API Image";
+  if (backend === "openai_responses") return "API Responses";
   return "";
 }
 

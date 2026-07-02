@@ -12,6 +12,9 @@ from typing import Any
 from codex_image.version import APP_VERSION, APP_VERSION_TAG
 
 UPDATE_NOTICE_FILENAME = "update-notice.json"
+POST_UPDATE_ONBOARDING_FILENAME = "post-update-onboarding.json"
+STANDARD_APP_TRANSITION_KIND = "portable_standard_app_transition"
+STANDARD_APP_TRANSITION_VERSION = "0.5.5"
 RELEASES_URL = "https://github.com/kadevin/ilab-gpt-conjure/releases"
 
 
@@ -26,6 +29,13 @@ def _normalize_version(value: str | None) -> str:
     parts = _parse_semver(value)
     if not parts:
         return APP_VERSION
+    return ".".join(str(part) for part in parts)
+
+
+def _optional_version(value: str | None) -> str | None:
+    parts = _parse_semver(value)
+    if not parts:
+        return None
     return ".".join(str(part) for part in parts)
 
 
@@ -61,15 +71,20 @@ def _portable_version(bundle_dir: Path | None) -> str:
     return _normalize_version(raw)
 
 
+def _read_json_object(path: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def _read_update_notice(data_dir: Path | None, current_version: str) -> dict[str, Any] | None:
     if not data_dir:
         return None
     notice_path = data_dir / UPDATE_NOTICE_FILENAME
-    try:
-        payload = json.loads(notice_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(payload, dict):
+    payload = _read_json_object(notice_path)
+    if payload is None:
         return None
     latest_version = _normalize_version(str(payload.get("latest_version") or payload.get("latest") or ""))
     current_parts = _parse_semver(current_version)
@@ -82,6 +97,42 @@ def _read_update_notice(data_dir: Path | None, current_version: str) -> dict[str
         "checked_at": payload.get("checked_at"),
         "release_url": payload.get("release_url") or f"{RELEASES_URL}/tag/{_version_tag(latest_version)}",
     }
+
+
+def _read_post_update_onboarding(data_dir: Path | None, current_version: str, *, portable: bool) -> dict[str, Any] | None:
+    if not portable or not data_dir:
+        return None
+    current_parts = _parse_semver(current_version)
+    transition_parts = _parse_semver(STANDARD_APP_TRANSITION_VERSION)
+    if not current_parts or not transition_parts or current_parts < transition_parts:
+        return None
+
+    marker_path = data_dir / POST_UPDATE_ONBOARDING_FILENAME
+    marker = _read_json_object(marker_path) or {}
+    if marker.get("dismissed") is True:
+        return None
+
+    to_version = (
+        _optional_version(str(marker.get("to_version") or ""))
+        or _optional_version(str(marker.get("latest_version") or ""))
+        or current_version
+    )
+    from_version = _optional_version(str(marker.get("from_version") or marker.get("current_version") or ""))
+    release_url = str(marker.get("release_url") or "").strip() or f"{RELEASES_URL}/tag/{_version_tag(to_version)}"
+    notice: dict[str, Any] = {
+        "kind": str(marker.get("kind") or STANDARD_APP_TRANSITION_KIND),
+        "notice_id": f"{STANDARD_APP_TRANSITION_KIND}:{_version_tag(to_version)}",
+        "to_version": to_version,
+        "to_version_label": _version_tag(to_version),
+        "updated_at": marker.get("updated_at"),
+        "release_url": release_url,
+        "standard_download_url": str(marker.get("standard_download_url") or "").strip() or release_url,
+        "data_dir": str(data_dir),
+    }
+    if from_version:
+        notice["from_version"] = from_version
+        notice["from_version_label"] = _version_tag(from_version)
+    return notice
 
 
 def _updater_script(bundle_dir: Path | None) -> Path | None:
@@ -104,6 +155,7 @@ def app_version_payload(output_root: Path) -> dict[str, Any]:
     notice = _read_update_notice(data_dir, current_version)
     updater = _updater_script(bundle_dir)
     portable = bundle_dir is not None
+    onboarding = _read_post_update_onboarding(data_dir, current_version, portable=portable)
     latest_version = notice["latest_version"] if notice else current_version
     return {
         "current_version": current_version,
@@ -117,10 +169,40 @@ def app_version_payload(output_root: Path) -> dict[str, Any]:
         "release_url": notice.get("release_url") if notice else RELEASES_URL,
         "updater_available": updater is not None,
         "updater_label": updater.name if updater else None,
+        "post_update_onboarding": onboarding,
         "server_time": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "app_version": APP_VERSION,
         "app_version_label": APP_VERSION_TAG,
     }
+
+
+def dismiss_post_update_onboarding(output_root: Path) -> dict[str, Any]:
+    bundle_dir = _portable_bundle_dir()
+    data_dir = _data_dir_from_output_root(output_root)
+    if data_dir is None:
+        raise FileNotFoundError("Portable data directory is not available")
+    current_version = _portable_version(bundle_dir)
+    marker_path = data_dir / POST_UPDATE_ONBOARDING_FILENAME
+    marker = _read_json_object(marker_path) or {}
+    to_version = (
+        _optional_version(str(marker.get("to_version") or ""))
+        or _optional_version(str(marker.get("latest_version") or ""))
+        or current_version
+    )
+    release_url = str(marker.get("release_url") or "").strip() or f"{RELEASES_URL}/tag/{_version_tag(to_version)}"
+    marker.update(
+        {
+            "kind": str(marker.get("kind") or STANDARD_APP_TRANSITION_KIND),
+            "to_version": to_version,
+            "to_version_label": _version_tag(to_version),
+            "release_url": release_url,
+            "dismissed": True,
+            "dismissed_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        }
+    )
+    data_dir.mkdir(parents=True, exist_ok=True)
+    marker_path.write_text(json.dumps(marker, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return app_version_payload(output_root)
 
 
 def open_portable_updater(output_root: Path) -> dict[str, Any]:

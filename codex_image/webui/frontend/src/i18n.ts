@@ -20,6 +20,12 @@ export function normalizeLocale(value: unknown): Locale {
   return localeFromLanguageTag(value) || DEFAULT_LOCALE;
 }
 
+function localePreferenceFromValue(value: unknown): Locale | null {
+  if (canUseLocale(value)) return value;
+  if (typeof value !== "string") return null;
+  return localeFromLanguageTag(value);
+}
+
 export function localeFromLanguageTag(value: unknown): Locale | null {
   if (typeof value !== "string") return null;
   const language = value.trim().toLowerCase();
@@ -112,24 +118,59 @@ export function applyLocaleToDocument(): void {
 export function setLocale(locale: Locale, options: { persist?: boolean } = {}): void {
   currentLocale = normalizeLocale(locale);
   if (options.persist !== false) {
-    try {
-      localStorage.setItem(LOCALE_STORAGE_KEY, currentLocale);
-    } catch {
-      // Browser storage may be unavailable in restricted contexts.
-    }
+    persistLocalePreference();
   }
   applyLocaleToDocument();
   document.dispatchEvent(new CustomEvent(LOCALE_CHANGE_EVENT, { detail: { locale: currentLocale } }));
 }
 
-export function restoreLocalePreference(): void {
-  let saved: string | null = null;
+function readLocalLocalePreference(): Locale | null {
   try {
-    saved = localStorage.getItem(LOCALE_STORAGE_KEY);
+    return localePreferenceFromValue(localStorage.getItem(LOCALE_STORAGE_KEY));
   } catch {
-    saved = null;
+    return null;
   }
-  setLocale(saved ? normalizeLocale(saved) : detectPreferredLocale(), { persist: false });
+}
+
+async function readStoredLocalePreference(): Promise<Locale | null> {
+  try {
+    const response = await fetch("/api/settings");
+    if (response.ok) {
+      const payload = await response.json();
+      const locale = localePreferenceFromValue(payload?.settings?.locale);
+      if (locale) return locale;
+    }
+  } catch {
+    // Server settings may be unavailable while static HTML is being inspected.
+  }
+  return readLocalLocalePreference();
+}
+
+function persistLocalePreference(): void {
+  try {
+    localStorage.setItem(LOCALE_STORAGE_KEY, currentLocale);
+  } catch {
+    // Browser storage may be unavailable in restricted contexts.
+  }
+  void fetch("/api/settings", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ locale: currentLocale })
+  }).catch(() => {
+    // Language still applies locally if the shared settings write fails.
+  });
+}
+
+export function restoreLocalePreference(): void {
+  const fallback = readLocalLocalePreference() || detectPreferredLocale();
+  setLocale(fallback, { persist: false });
+  void readStoredLocalePreference()
+    .then((storedLocale) => {
+      setLocale(storedLocale || fallback);
+    })
+    .catch(() => {
+      persistLocalePreference();
+    });
 }
 
 function bindLanguageSelect(): void {

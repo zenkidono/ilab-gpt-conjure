@@ -38,7 +38,7 @@ function toggleBatchMode(force?: any) {
     state.batchSelectionAnchorTaskId = null;
     finishBatchMarqueeSelection();
   }
-  renderTasks();
+  renderTasks({ preserveScroll: true });
   renderBatchToolbar();
 }
 
@@ -51,7 +51,7 @@ function toggleBatchTaskSelection(taskId: any) {
     state.batchSelectedTaskIds.push(id);
   }
   state.batchSelectionAnchorTaskId = id;
-  renderTasks();
+  syncBatchTaskSelectionVisuals();
 }
 
 function removeBatchSelectedTaskId(taskId: any) {
@@ -68,11 +68,16 @@ function visibleBatchTaskIds() {
 }
 
 function applyBatchTaskSelection(taskIds: any[], anchorTaskId: any = null) {
+  const wasBatchMode = Boolean(state.batchMode);
   state.batchSelectedTaskIds = Array.from(new Set(taskIds.map(String).filter(Boolean)));
   if (anchorTaskId) state.batchSelectionAnchorTaskId = String(anchorTaskId);
   state.batchMode = true;
-  renderTasks();
-  renderBatchToolbar();
+  if (wasBatchMode) {
+    syncBatchTaskSelectionVisuals();
+  } else {
+    renderTasks({ preserveScroll: true });
+    renderBatchToolbar();
+  }
 }
 
 function selectBatchTaskRange(anchorTaskId: any, taskId: any) {
@@ -97,7 +102,6 @@ function handleBatchTaskShortcutSelection(taskId: any, event: MouseEvent | Keybo
   if (!event.shiftKey && !event.metaKey && !event.ctrlKey) return false;
   event.preventDefault();
   event.stopPropagation();
-  state.batchMode = true;
   if (event.shiftKey) {
     selectBatchTaskRange(state.batchSelectionAnchorTaskId || state.selectedTaskId || id, id);
     return true;
@@ -108,6 +112,18 @@ function handleBatchTaskShortcutSelection(taskId: any, event: MouseEvent | Keybo
     : [...state.batchSelectedTaskIds, id];
   applyBatchTaskSelection(nextIds, id);
   return true;
+}
+
+function syncBatchTaskSelectionVisuals() {
+  const selectedIds = new Set(state.batchSelectedTaskIds.map(String));
+  const root = els.taskHistoryShell || els.sidebarContent || els.taskList;
+  root?.querySelectorAll(TASK_CARD_SELECTOR).forEach((card: any) => {
+    const selected = selectedIds.has(String(card.dataset.taskId || ""));
+    card.classList.toggle("batch-selected", selected);
+    const selectButton = card.querySelector("[data-batch-select-task-id]");
+    if (selectButton) selectButton.setAttribute("aria-pressed", selected ? "true" : "false");
+  });
+  renderBatchToolbar();
 }
 
 function renderBatchToolbar() {

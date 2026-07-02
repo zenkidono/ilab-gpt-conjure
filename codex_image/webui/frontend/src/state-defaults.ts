@@ -46,6 +46,7 @@ export function createDefaultState(): WebUIState {
   previewRenderKey: null,
   tasksRenderKey: null,
   taskSearchHistoryResultIds: [],
+  taskSearchHistoryResultQuery: "",
   taskSearchHistoryRequestSeq: 0,
   pendingTaskId: null,
   galleryItems: [],

@@ -26,44 +26,91 @@
         const LOCALE_STORAGE_KEY = "codex-image-locale-preference";
         const valid = new Set(["zh-CN", "zh-TW", "zh-HK", "ja", "ko", "en", "es", "pt", "fr", "de", "ru", "it", "hi"]);
         const defaultLocale = "zh-CN";
+        let currentLocale = defaultLocale;
+        function normalizeLocale(value) {
+          if (valid.has(value)) return value;
+          const language = String(value || "").trim().toLowerCase();
+          if (!language) return null;
+          for (const locale of valid) {
+            if (locale.toLowerCase() === language) return locale;
+          }
+          if (language.startsWith("zh-hk") || language.startsWith("zh-mo")) return "zh-HK";
+          if (language.startsWith("zh-tw") || language.startsWith("zh-hant")) return "zh-TW";
+          if (language.startsWith("zh-cn") || language.startsWith("zh-sg") || language.startsWith("zh-hans") || language === "zh") return "zh-CN";
+          if (language.startsWith("ja")) return "ja";
+          if (language.startsWith("ko")) return "ko";
+          if (language.startsWith("en")) return "en";
+          if (language.startsWith("es")) return "es";
+          if (language.startsWith("pt")) return "pt";
+          if (language.startsWith("fr")) return "fr";
+          if (language.startsWith("de")) return "de";
+          if (language.startsWith("ru")) return "ru";
+          if (language.startsWith("it")) return "it";
+          if (language.startsWith("hi")) return "hi";
+          return null;
+        }
         function detectPreferredLocale(languages) {
           const candidates = languages && languages.length
             ? languages
             : [...Array.from(navigator.languages || []), navigator.language];
           for (const candidate of candidates) {
-            const language = String(candidate || "").trim().toLowerCase();
-            if (!language) continue;
-            for (const locale of valid) {
-              if (locale.toLowerCase() === language) return locale;
-            }
-            if (language.startsWith("zh-hk") || language.startsWith("zh-mo")) return "zh-HK";
-            if (language.startsWith("zh-tw") || language.startsWith("zh-hant")) return "zh-TW";
-            if (language.startsWith("zh-cn") || language.startsWith("zh-sg") || language.startsWith("zh-hans") || language === "zh") return "zh-CN";
-            if (language.startsWith("ja")) return "ja";
-            if (language.startsWith("ko")) return "ko";
-            if (language.startsWith("en")) return "en";
-            if (language.startsWith("es")) return "es";
-            if (language.startsWith("pt")) return "pt";
-            if (language.startsWith("fr")) return "fr";
-            if (language.startsWith("de")) return "de";
-            if (language.startsWith("ru")) return "ru";
-            if (language.startsWith("it")) return "it";
-            if (language.startsWith("hi")) return "hi";
+            const locale = normalizeLocale(candidate);
+            if (locale) return locale;
           }
           return defaultLocale;
         }
-        let locale = detectPreferredLocale();
+        function readLocalLocalePreference() {
+          try {
+            return normalizeLocale(localStorage.getItem(LOCALE_STORAGE_KEY));
+          } catch {
+            return null;
+          }
+        }
+        async function readStoredLocalePreference() {
+          try {
+            const response = await fetch("/api/settings");
+            if (response.ok) {
+              const payload = await response.json();
+              const locale = normalizeLocale(payload?.settings?.locale);
+              if (locale) return locale;
+            }
+          } catch {
+            return readLocalLocalePreference();
+          }
+          return readLocalLocalePreference();
+        }
+        function applyLocale(locale) {
+          currentLocale = locale || defaultLocale;
+          document.documentElement.lang = currentLocale;
+          document.documentElement.dataset.locale = currentLocale;
+        }
+        function persistLocalePreference() {
+          try {
+            localStorage.setItem(LOCALE_STORAGE_KEY, currentLocale);
+          } catch {
+            // Browser storage may be unavailable in restricted contexts.
+          }
+          void fetch("/api/settings", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ locale: currentLocale })
+          }).catch(() => {});
+        }
+        let locale = readLocalLocalePreference() || detectPreferredLocale();
         try {
           const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
-          if (valid.has(stored)) locale = stored;
+          locale = normalizeLocale(stored) || locale;
         } catch {
           locale = detectPreferredLocale();
         }
-        document.documentElement.lang = locale;
-        document.documentElement.dataset.locale = locale;
+        applyLocale(locale);
+        void readStoredLocalePreference().then((storedLocale) => {
+          applyLocale(storedLocale || locale);
+          persistLocalePreference();
+        });
       })();
     </script>
-    <link rel="stylesheet" href="/static/styles.css?v=runtime-400" />
+    <link rel="stylesheet" href="/static/styles.css?v=runtime-405" />
   </head>
   <body>
     <div class="layout-container">
@@ -72,12 +119,21 @@
         <div class="sidebar-header">
           <div class="brand" aria-label="iLab GPT CONJURE">
             <div class="brand-lockup">
-              <div class="brand-mark" aria-hidden="true">
-                <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <rect x="7.2" y="8.2" width="17.6" height="15.6" rx="3.4" stroke="rgba(255,255,255,.9)" stroke-width="2"/>
-                  <path d="M10.2 20.4l4.6-4.4 3.1 3 2.2-2.1 3.7 3.5" stroke="rgba(255,255,255,.84)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                  <circle cx="20.7" cy="12.7" r="1.75" fill="#f7d59d"/>
-                  <path d="M25.1 6.8v3.2M23.5 8.4h3.2" stroke="#f7d59d" stroke-width="1.7" stroke-linecap="round"/>
+              <div class="brand-mark brand-mark-rabbit" aria-hidden="true">
+                <svg class="brand-rabbit-logo" width="31" height="31" viewBox="0 0 24 24" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+                  <g class="brand-rabbit-fill">
+                    <ellipse cx="8.3" cy="6.3" rx="1.45" ry="4.15" transform="rotate(-9 8.3 6.3)"/>
+                    <ellipse cx="12.7" cy="6.6" rx="1.35" ry="4.25" transform="rotate(36 12.7 6.6)"/>
+                    <ellipse cx="14.4" cy="15.6" rx="6.3" ry="4.8"/>
+                    <ellipse cx="8.9" cy="12.4" rx="4.6" ry="4.25"/>
+                    <ellipse cx="19.3" cy="13.9" rx="1.85" ry="1.95"/>
+                    <ellipse cx="9.4" cy="19.1" rx="2.7" ry="1.15"/>
+                    <ellipse cx="15.3" cy="19.2" rx="3.2" ry="1.15"/>
+                  </g>
+                  <ellipse class="brand-rabbit-cutout" cx="8.2" cy="5.9" rx=".52" ry="2.25" transform="rotate(-9 8.2 5.9)"/>
+                  <ellipse class="brand-rabbit-cutout" cx="12.45" cy="6.0" rx=".48" ry="2.15" transform="rotate(36 12.45 6.0)"/>
+                  <circle class="brand-rabbit-cutout" cx="7.45" cy="11.7" r=".72"/>
+                  <path class="brand-rabbit-spark" d="M18.9 5.2v2.4M17.7 6.4h2.4"/>
                 </svg>
               </div>
               <div class="brand-title">
@@ -880,9 +936,8 @@
               <button id="saveApiProviderEditButton" class="run-button" type="button" data-i18n="apiSettings.saveProvider">保存供应商</button>
             </div>
           </div>
-          <div id="apiSettingsActions" class="settings-modal-actions">
+          <div id="apiSettingsActions" class="settings-modal-actions settings-status-only">
             <p id="apiSettingsStatus" class="api-settings-feedback settings-action-status" aria-live="polite"></p>
-            <button id="saveApiSettingsButton" class="run-button" type="button" data-i18n="apiSettings.saveSelection">保存当前选择</button>
           </div>
         </section>
         <section id="systemSettingsCodexPanel" class="system-settings-section" role="tabpanel" aria-labelledby="systemSettingsCodexTab" hidden aria-hidden="true">
@@ -899,19 +954,24 @@
               </select>
             </div>
             <div class="codex-channel-notes" aria-label="Codex 通道说明" data-i18n-attr="aria-label:codexSettings.notesLabel">
-              <div class="codex-channel-note">
-                <strong data-i18n="codexSettings.imagesTitle">Image</strong>
+              <button class="codex-channel-note active" type="button" data-codex-mode-note="images" aria-current="true">
+                <span class="codex-channel-note-header">
+                  <strong data-i18n="codexSettings.imagesTitle">Codex Image</strong>
+                  <span class="codex-channel-current" data-i18n="codexSettings.current">当前使用</span>
+                </span>
                 <span data-i18n="codexSettings.imagesCopy">默认通道，直接传递尺寸、质量和编辑参数。</span>
-              </div>
-              <div class="codex-channel-note">
-                <strong data-i18n="codexSettings.responsesTitle">Responses</strong>
+              </button>
+              <button class="codex-channel-note" type="button" data-codex-mode-note="responses" aria-current="false">
+                <span class="codex-channel-note-header">
+                  <strong data-i18n="codexSettings.responsesTitle">Codex Responses</strong>
+                  <span class="codex-channel-current" data-i18n="codexSettings.current">当前使用</span>
+                </span>
                 <span data-i18n="codexSettings.responsesCopy">兼容通道，需要联网搜索工具流时使用。</span>
-              </div>
+              </button>
             </div>
           </div>
-          <div class="settings-modal-actions">
+          <div class="settings-modal-actions settings-status-only">
             <p id="codexSettingsStatus" class="api-settings-feedback settings-action-status" aria-live="polite"></p>
-            <button id="saveCodexSettingsButton" class="run-button" type="button" data-i18n="codexSettings.save">保存 Codex 通道</button>
           </div>
         </section>
         <section id="systemSettingsLanguagePanel" class="system-settings-section" role="tabpanel" aria-labelledby="systemSettingsLanguageTab" hidden aria-hidden="true">
@@ -1006,9 +1066,21 @@
             <strong id="versionSource">...</strong>
           </div>
         </div>
+        <div id="versionOnboardingNotice" class="version-onboarding hidden" role="status">
+          <strong data-i18n="version.onboardingTitle">0.5.5 新增标准应用包</strong>
+          <p id="versionOnboardingBody" data-i18n="version.onboardingBody">这次更新新增了 macOS DMG 和 Windows App ZIP。新用户建议使用标准包；当前便携包仍可继续使用。</p>
+          <ul>
+            <li data-i18n="version.onboardingDataPortable">当前数据已保留在这个便携包的 data/ 目录。</li>
+            <li data-i18n="version.onboardingStandardData">标准 App 会把数据放到系统应用数据目录：macOS Application Support / Windows %APPDATA%。</li>
+            <li data-i18n="version.onboardingMigration">切换标准 App 时请使用迁移助手复制旧数据，不会移动或覆盖原数据。</li>
+          </ul>
+        </div>
         <div class="version-modal-actions">
           <a id="versionReleaseLink" class="ghost-button text-sm" href="https://github.com/kadevin/ilab-gpt-conjure/releases" target="_blank" rel="noreferrer" data-i18n="version.release">查看发布页</a>
+          <a id="versionStandardDownloadLink" class="run-button text-sm hidden" href="https://github.com/kadevin/ilab-gpt-conjure/releases" target="_blank" rel="noreferrer" data-i18n="version.standardDownload">下载标准版</a>
           <button id="versionUpdateButton" class="run-button" type="button" disabled data-i18n="version.openUpdater">启动更新器</button>
+          <button id="versionContinuePortableButton" class="ghost-button text-sm hidden" type="button" data-i18n="version.continuePortable">继续使用便携版</button>
+          <button id="versionDismissOnboardingButton" class="ghost-button text-sm hidden" type="button" data-i18n="version.dismissOnboarding">不再提示</button>
         </div>
       </div>
     </div>
@@ -1218,7 +1290,7 @@
     </div>
 
     <div id="taskNotificationToastRegion" class="task-notification-toast-region" aria-live="polite"></div>
-  <script src="/static/app.js?v=runtime-400"></script>
+  <script src="/static/app.js?v=runtime-405"></script>
     <script>
       (() => {
         document.querySelectorAll(".radio-group").forEach((group) => {

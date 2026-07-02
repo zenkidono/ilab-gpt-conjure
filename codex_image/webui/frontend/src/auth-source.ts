@@ -116,7 +116,7 @@ export function authSourceDetailText(auth: any): string {
     const mode = apiModeLabel(currentApiMode());
     return `API · ${provider} · ${mode}`;
   }
-  return `Codex · ${codexModeLabel(currentCodexMode())}`;
+  return codexModeLabel(currentCodexMode());
 }
 
 export function sourceLabel(source: any): string {

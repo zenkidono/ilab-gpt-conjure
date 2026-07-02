@@ -27,6 +27,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 PROJECT_NAME="ilab-gpt-conjure"
+APP_LAUNCHER_NAME="Start iLab GPT CONJURE"
+APP_BUNDLE_NAME="${APP_LAUNCHER_NAME}.app"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 PYTHON_MINOR="${PYTHON_VERSION%.*}"
@@ -65,6 +67,10 @@ fi
 
 BUNDLE_NAME="${PROJECT_NAME}_macos_portable_${PACKAGE_ARCH}"
 BUNDLE_ROOT="${BUILD_ROOT}/${BUNDLE_NAME}"
+APP_BUNDLE_ROOT="${BUNDLE_ROOT}/${APP_BUNDLE_NAME}"
+APP_BUNDLE_CONTENTS="${APP_BUNDLE_ROOT}/Contents"
+APP_BUNDLE_MACOS="${APP_BUNDLE_CONTENTS}/MacOS"
+APP_BUNDLE_RESOURCES="${APP_BUNDLE_CONTENTS}/Resources"
 APP_DIR="${BUNDLE_ROOT}/app"
 PYTHON_DIR="${BUNDLE_ROOT}/python"
 PYTHON_FRAMEWORK="${PYTHON_DIR}/Python.framework"
@@ -79,6 +85,7 @@ PYTHON_PKG_URL="https://www.python.org/ftp/python/${PYTHON_VERSION}/${PYTHON_PKG
 
 APP_ITEMS=(
   "codex_image"
+  "launcher"
   "assets"
   "requirements-webui.txt"
   "package.json"
@@ -106,8 +113,30 @@ copy_app_item() {
 
 remove_local_artifacts() {
   local root="$1"
-  find "$root" \( -name "__pycache__" -o -name ".pytest_cache" -o -name ".mypy_cache" -o -name ".ruff_cache" \) -prune -exec rm -rf {} + 2>/dev/null || true
+  chflags -R nouchg,noschg,nohidden "$root" 2>/dev/null || true
+  find "$root" \( -name "__pycache__" -o -name ".pytest_cache" -o -name ".mypy_cache" -o -name ".ruff_cache" -o -name "target" \) -prune -exec rm -rf {} + 2>/dev/null || true
   find "$root" \( -name ".DS_Store" -o -name "*.pyc" -o -name "*.pyo" \) -type f -delete 2>/dev/null || true
+}
+
+remove_build_path() {
+  local path="$1"
+  if [[ ! -e "$path" ]]; then
+    return
+  fi
+
+  remove_local_artifacts "$path"
+  rm -rf "$path" 2>/dev/null || true
+  if [[ -e "$path" ]]; then
+    local stale_path="${path}.stale.$$"
+    rm -rf "$stale_path" 2>/dev/null || true
+    mv "$path" "$stale_path" 2>/dev/null || true
+    if [[ -e "$path" ]]; then
+      echo "Could not remove old build directory: ${path}" >&2
+      exit 1
+    fi
+    remove_local_artifacts "$stale_path"
+    rm -rf "$stale_path" 2>/dev/null || true
+  fi
 }
 
 relocate_python_framework() {
@@ -172,8 +201,67 @@ relocate_python_framework() {
   codesign --force --sign - "$framework_binary" >/dev/null 2>&1 || true
 }
 
+create_macos_app_icon() {
+  local source_svg="$1"
+  local output_icns="$2"
+  local work_dir="$3"
+  local iconset_dir="${work_dir}/AppIcon.iconset"
+  local source_png="${work_dir}/source.png"
+
+  rm -rf "$work_dir"
+  mkdir -p "$iconset_dir"
+  sips -s format png -z 1024 1024 "$source_svg" --out "$source_png" >/dev/null
+
+  for size in 16 32 128 256 512; do
+    sips -z "$size" "$size" "$source_png" --out "${iconset_dir}/icon_${size}x${size}.png" >/dev/null
+    local retina_size=$((size * 2))
+    sips -z "$retina_size" "$retina_size" "$source_png" --out "${iconset_dir}/icon_${size}x${size}@2x.png" >/dev/null
+  done
+  iconutil -c icns "$iconset_dir" -o "$output_icns"
+}
+
+write_macos_app_plist() {
+  local plist_path="$1"
+  cat > "$plist_path" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>${APP_LAUNCHER_NAME}</string>
+  <key>CFBundleExecutable</key>
+  <string>ilab-conjure-launcher</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.ilab.gpt-conjure.launcher</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>iLab GPT CONJURE</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>${SAFE_VERSION}</string>
+  <key>CFBundleVersion</key>
+  <string>${SAFE_VERSION}</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>11.0</string>
+  <key>LSUIElement</key>
+  <true/>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+  plutil -lint "$plist_path" >/dev/null
+}
+
 mkdir -p "$BUILD_ROOT" "$CACHE_DIR"
-rm -rf "$BUNDLE_ROOT" "$ZIP_PATH" "$HASH_PATH"
+remove_build_path "$BUNDLE_ROOT"
+rm -f "$ZIP_PATH" "$HASH_PATH"
 mkdir -p "$APP_DIR" "$PYTHON_DIR" "$DATA_DIR/logs"
 
 for item in "${APP_ITEMS[@]}"; do
@@ -224,9 +312,22 @@ fi
 PYTHONPATH="${APP_DIR}:${APP_DIR}/.deps" "$PYTHON_BIN" -m pip freeze | tee "${BUNDLE_ROOT}/python-requirements.lock.txt" >/dev/null
 PYTHONPATH="${APP_DIR}:${APP_DIR}/.deps" "$PYTHON_BIN" -c "import fastapi, uvicorn, multipart, httpx, PIL; import portable_webui_app; print('portable import ok')"
 
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "cargo was not found. Install Rust toolchain before building the portable tray launcher." >&2
+  exit 1
+fi
+cargo build --manifest-path "${REPO_ROOT}/launcher/Cargo.toml" --release --locked
+mkdir -p "$APP_BUNDLE_MACOS" "$APP_BUNDLE_RESOURCES"
+cp "${REPO_ROOT}/launcher/target/release/ilab-conjure-launcher" "${APP_BUNDLE_MACOS}/ilab-conjure-launcher"
+chmod +x "${APP_BUNDLE_MACOS}/ilab-conjure-launcher"
+create_macos_app_icon "${REPO_ROOT}/launcher/assets/rabbit-logo.svg" "${APP_BUNDLE_RESOURCES}/AppIcon.icns" "${BUILD_ROOT}/_app-icon"
+write_macos_app_plist "${APP_BUNDLE_CONTENTS}/Info.plist"
+codesign --force --deep --sign - "$APP_BUNDLE_ROOT" >/dev/null 2>&1 || true
+remove_local_artifacts "$BUNDLE_ROOT"
+
 (
   cd "$BUILD_ROOT"
-  ditto -c -k --sequesterRsrc --keepParent "$BUNDLE_NAME" "$ZIP_PATH"
+  COPYFILE_DISABLE=1 zip -qry --symlinks "$ZIP_PATH" "$BUNDLE_NAME" -x "*/.DS_Store" "__MACOSX/*"
 )
 
 SHA256="$(shasum -a 256 "$ZIP_PATH" | awk '{print $1}')"

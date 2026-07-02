@@ -322,6 +322,7 @@ class WebUIRefactorContractTests(unittest.TestCase):
                 ("/api/health", "GET"),
                 ("/api/app-version", "GET"),
                 ("/api/app-version/open-updater", "POST"),
+                ("/api/app-version/dismiss-onboarding", "POST"),
                 ("/api/settings", "GET"),
                 ("/api/settings", "PATCH"),
                 ("/api/color-palette", "GET"),

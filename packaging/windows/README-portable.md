@@ -7,20 +7,29 @@ WebUI without installing Python separately.
 
 1. Extract the zip package into a normal user directory, for example
    `D:\Apps\ilab-gpt-conjure`.
-2. Double-click `Start WebUI Portable.bat`.
+2. Double-click `Start iLab GPT CONJURE.exe` for the system tray launcher, or
+   `Start WebUI Portable.bat` for the legacy terminal launcher.
 3. Open `http://127.0.0.1:8787/` if the browser does not open automatically.
 4. Choose `Codex` if this machine has a local Codex / ChatGPT OAuth session, or
    configure an OpenAI-compatible API provider in the WebUI for the recommended
    stable integration path.
 
-The startup launcher only starts the local WebUI server and opens the browser.
-It does not contact GitHub or update files automatically. To check for and apply
-updates, run `Update WebUI Portable.bat` manually.
+The Rust system tray launcher starts the local WebUI server without a separate
+terminal window, opens the browser, and keeps a rabbit icon in the Windows
+notification area. Its menu can open the WebUI, check published updates, show
+project info, restart the service, or quit. It does not contact GitHub
+automatically; the check action only runs when you choose it from the menu. It
+can start the bundled updater after you confirm an available update. The updater
+downloads and verifies the matching zip, preserves `data/`, replaces
+package-managed files, and restarts the tray launcher. You can also quit the
+launcher and run `Update WebUI Portable.bat` manually.
 
 ## Directory layout
 
-- `Start WebUI Portable.bat`: one-click WebUI launcher.
-- `Update WebUI Portable.bat`: one-click updater for the latest GitHub Release.
+- `Start iLab GPT CONJURE.exe`: system tray launcher with the rabbit icon.
+- `Start WebUI Portable.bat`: legacy one-click terminal launcher.
+- `Update WebUI Portable.bat`: one-click updater for the latest GitHub Release
+  manifest entry matching Windows x64.
 - `app/`: iLab GPT Conjure source code, prebuilt static WebUI assets, and
   frontend package metadata/build config for source rebuilds.
 - `python/`: embedded CPython runtime and installed WebUI dependencies.
@@ -44,13 +53,21 @@ integration path.
 
 ## Upgrading
 
-Close the WebUI server window, then double-click `Update WebUI Portable.bat`.
-The updater prints the current version, latest version, selected release asset,
-SHA256 file, and download URL before making changes. It downloads the latest
-Windows x64 portable package from GitHub Releases, verifies its SHA256 file,
-replaces only the package-managed app and bundled Python files inside this
-portable folder, and preserves the existing `data/` directory. A backup of
-replaced files is saved under `.backup/`.
+Choose `Check for Updates` from the system tray launcher. If a newer signed
+release manifest is available, confirm `Install Update`; the launcher will hand
+off to the bundled updater, quit itself, and let the updater replace package
+files and restart the tray app.
+
+You can also quit the system tray launcher, close any WebUI server window, then
+double-click `Update WebUI Portable.bat` manually.
+The updater reads the published signed `latest.json` manifest, verifies its
+Ed25519 signature with the launcher public key, then prints the current version,
+latest version, selected release asset, manifest SHA256, and download URL before
+making changes. It downloads the latest Windows x64 portable package from
+GitHub Releases, verifies the manifest SHA256, replaces only the package-managed
+app, launcher, and bundled Python files inside this portable folder, and
+preserves the existing `data/` directory. A backup of replaced files is saved
+under `.backup/`.
 
 If your local PowerShell policy blocks the updater, run it from a trusted local
 PowerShell session according to your organization or device policy.

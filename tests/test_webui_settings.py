@@ -84,6 +84,7 @@ class WebUISettingsTests(unittest.TestCase):
         self.assertFalse(payload["portable"])
         self.assertFalse(payload["update_available"])
         self.assertFalse(payload["updater_available"])
+        self.assertIsNone(payload["post_update_onboarding"])
 
     def test_app_version_reports_portable_update_notice(self) -> None:
         from codex_image.webui.app import create_app
@@ -125,6 +126,90 @@ class WebUISettingsTests(unittest.TestCase):
         self.assertTrue(payload["update_available"])
         self.assertTrue(payload["updater_available"])
         self.assertEqual(payload["updater_label"], "Update WebUI Portable.command")
+        self.assertIsNone(payload["post_update_onboarding"])
+
+    def test_app_version_reports_portable_standard_app_transition_notice(self) -> None:
+        from codex_image.webui.app import create_app
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_dir = root / "bundle"
+            data_dir = bundle_dir / "data"
+            output_root = data_dir / "webui-outputs"
+            bundle_dir.mkdir()
+            data_dir.mkdir()
+            output_root.mkdir()
+            (bundle_dir / "portable-version.txt").write_text("0.5.5\n", encoding="utf-8")
+            (data_dir / "post-update-onboarding.json").write_text(
+                json.dumps(
+                    {
+                        "kind": "portable_standard_app_transition",
+                        "from_version": "0.5.4",
+                        "to_version": "0.5.5",
+                        "updated_at": "2026-07-01T00:00:00Z",
+                        "dismissed": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch.dict(
+                os.environ,
+                {"ILAB_CONJURE_BUNDLE_DIR": str(bundle_dir), "ILAB_CONJURE_DATA_DIR": str(data_dir)},
+            ):
+                app = create_app(output_root=output_root, auto_start_queue=False)
+                client = TestClient(app)
+                reported = client.get("/api/app-version")
+                dismissed = client.post("/api/app-version/dismiss-onboarding")
+                reported_after_dismiss = client.get("/api/app-version")
+                persisted = json.loads((data_dir / "post-update-onboarding.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(reported.status_code, 200)
+        onboarding = reported.json()["post_update_onboarding"]
+        self.assertEqual(onboarding["kind"], "portable_standard_app_transition")
+        self.assertEqual(onboarding["from_version"], "0.5.4")
+        self.assertEqual(onboarding["from_version_label"], "v0.5.4")
+        self.assertEqual(onboarding["to_version"], "0.5.5")
+        self.assertEqual(onboarding["to_version_label"], "v0.5.5")
+        self.assertIn("/tag/v0.5.5", onboarding["release_url"])
+        self.assertIn("/tag/v0.5.5", onboarding["standard_download_url"])
+        self.assertEqual(dismissed.status_code, 200)
+        self.assertIsNone(dismissed.json()["post_update_onboarding"])
+        self.assertIsNone(reported_after_dismiss.json()["post_update_onboarding"])
+        self.assertTrue(persisted["dismissed"])
+        self.assertEqual(persisted["kind"], "portable_standard_app_transition")
+
+    def test_app_version_shows_transition_notice_for_first_055_portable_start_without_marker(self) -> None:
+        from codex_image.webui.app import create_app
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle_dir = root / "bundle"
+            data_dir = bundle_dir / "data"
+            output_root = data_dir / "webui-outputs"
+            bundle_dir.mkdir()
+            data_dir.mkdir()
+            output_root.mkdir()
+            (bundle_dir / "portable-version.txt").write_text("0.5.5\n", encoding="utf-8")
+            with patch.dict(
+                os.environ,
+                {"ILAB_CONJURE_BUNDLE_DIR": str(bundle_dir), "ILAB_CONJURE_DATA_DIR": str(data_dir)},
+            ):
+                app = create_app(output_root=output_root, auto_start_queue=False)
+                client = TestClient(app)
+                reported = client.get("/api/app-version")
+                dismissed = client.post("/api/app-version/dismiss-onboarding")
+                reported_after_dismiss = client.get("/api/app-version")
+                persisted = json.loads((data_dir / "post-update-onboarding.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(reported.status_code, 200)
+        onboarding = reported.json()["post_update_onboarding"]
+        self.assertEqual(onboarding["kind"], "portable_standard_app_transition")
+        self.assertEqual(onboarding["to_version"], "0.5.5")
+        self.assertNotIn("from_version", onboarding)
+        self.assertEqual(dismissed.status_code, 200)
+        self.assertIsNone(dismissed.json()["post_update_onboarding"])
+        self.assertIsNone(reported_after_dismiss.json()["post_update_onboarding"])
+        self.assertTrue(persisted["dismissed"])
 
     def test_auth_routes_report_and_persist_codex_or_api_source(self) -> None:
         from codex_image.auth import AuthState
@@ -1629,6 +1714,40 @@ class WebUISettingsTests(unittest.TestCase):
         self.assertTrue(changed.json()["restart_required"])
         self.assertEqual(persisted["input_root"], str(root / "new-inputs"))
         self.assertEqual(invalid_gallery.status_code, 400)
+
+    def test_settings_routes_persist_locale_without_restart_and_preserve_it_on_path_update(self) -> None:
+        from codex_image.webui.app import create_app
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            settings_path = root / "webui-settings.json"
+            app = create_app(output_root=root / "outputs", webui_settings_path=settings_path, auth_checker=lambda: True, auto_start_queue=False)
+            client = TestClient(app)
+
+            initial = client.get("/api/settings")
+            changed_locale = client.patch("/api/settings", json={"locale": "zh-TW"})
+            changed_paths = client.patch(
+                "/api/settings",
+                json={
+                    "input_root": str(root / "new-inputs"),
+                    "output_root": str(root / "new-outputs"),
+                    "gallery_root": str(root / "new-inputs" / "gallery"),
+                    "source_data_root": str(root / "new-outputs" / "source-data"),
+                },
+            )
+            invalid_locale = client.patch("/api/settings", json={"locale": "xx"})
+            persisted = json.loads(settings_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(initial.status_code, 200)
+        self.assertIsNone(initial.json()["settings"]["locale"])
+        self.assertEqual(changed_locale.status_code, 200)
+        self.assertFalse(changed_locale.json()["restart_required"])
+        self.assertEqual(changed_locale.json()["settings"]["locale"], "zh-TW")
+        self.assertEqual(changed_paths.status_code, 200)
+        self.assertTrue(changed_paths.json()["restart_required"])
+        self.assertEqual(changed_paths.json()["settings"]["locale"], "zh-TW")
+        self.assertEqual(persisted["locale"], "zh-TW")
+        self.assertEqual(invalid_locale.status_code, 400)
     def test_color_palette_endpoint_defaults_and_persists_normalized_colors(self) -> None:
         from codex_image.webui.app import create_app
 

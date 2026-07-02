@@ -4,28 +4,71 @@ set -o pipefail
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
 
 REPO_SLUG="kadevin/ilab-gpt-conjure"
-LATEST_RELEASE_URL="https://api.github.com/repos/kadevin/ilab-gpt-conjure/releases/latest"
+LATEST_UPDATE_MANIFEST_URL="https://github.com/kadevin/ilab-gpt-conjure/releases/latest/download/latest.json"
 BUNDLE_DIR="$(cd "$(dirname "$0")" && pwd)"
 DATA_DIR="${BUNDLE_DIR}/data"
 VERSION_FILE="${BUNDLE_DIR}/portable-version.txt"
 UPDATE_NOTICE_FILE="${DATA_DIR}/update-notice.json"
+POST_UPDATE_ONBOARDING_FILE="${DATA_DIR}/post-update-onboarding.json"
 PYTHON_BIN="${BUNDLE_DIR}/python/Python.framework/Versions/3.11/bin/python3"
+LAUNCHER_BIN="${BUNDLE_DIR}/Start iLab GPT CONJURE.app/Contents/MacOS/ilab-conjure-launcher"
 HOST_ARCH="$(uname -m)"
 TIMESTAMP="$(date +"%Y%m%d-%H%M%S")"
 TEMP_ROOT="${TMPDIR:-/tmp}/ilab-gpt-conjure-update-${TIMESTAMP}"
 EXTRACT_DIR="${TEMP_ROOT}/extract"
 BACKUP_DIR="${BUNDLE_DIR}/.backup/update-${TIMESTAMP}"
+AUTO_INSTALL=0
+RESTART_LAUNCHER=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --auto|--assume-yes)
+      AUTO_INSTALL=1
+      ;;
+    --restart-launcher)
+      RESTART_LAUNCHER=1
+      ;;
+    *)
+      echo "Unknown argument: ${arg}" >&2
+      exit 1
+      ;;
+  esac
+done
+
+pause_to_close() {
+  if [[ "$AUTO_INSTALL" == "1" ]]; then
+    return 0
+  fi
+  read -r "?Press Enter to close..."
+}
+
+pause_to_continue() {
+  if [[ "$AUTO_INSTALL" == "1" ]]; then
+    echo "Auto install requested; continuing without prompt."
+    return 0
+  fi
+  read -r "?Press Enter to continue..."
+}
+
+if [[ "$AUTO_INSTALL" == "1" ]]; then
+  mkdir -p "$DATA_DIR"
+  exec >> "${DATA_DIR}/portable-updater.log" 2>&1
+  echo ""
+  echo "==== $(date -u +"%Y-%m-%dT%H:%M:%SZ") auto update ===="
+fi
 
 case "$HOST_ARCH" in
   arm64)
     PACKAGE_ARCH="arm64"
+    PLATFORM_KEY="darwin-aarch64"
     ;;
   x86_64)
     PACKAGE_ARCH="x64"
+    PLATFORM_KEY="darwin-x86_64"
     ;;
   *)
     echo "Unsupported macOS architecture: ${HOST_ARCH}" >&2
-    read -r "?Press Enter to close..."
+    pause_to_close
     exit 1
     ;;
 esac
@@ -36,6 +79,7 @@ ASSET_PREFIX="ilab-gpt-conjure_macos_portable_${PACKAGE_ARCH}_"
 REPLACE_ITEMS=(
   "app"
   "python"
+  "Start iLab GPT CONJURE.app"
   "Start WebUI Portable.command"
   "Update WebUI Portable.command"
   "README-portable.md"
@@ -101,7 +145,7 @@ fail_update() {
   echo "Update failed: $1" >&2
   restore_backup || true
   cleanup
-  read -r "?Press Enter to close..."
+  pause_to_close
   exit 1
 }
 
@@ -116,6 +160,45 @@ current_portable_version() {
 
 clear_update_notice() {
   rm -f "$UPDATE_NOTICE_FILE" 2>/dev/null || true
+}
+
+write_post_update_onboarding_notice() {
+  "$PYTHON_BIN" - "$POST_UPDATE_ONBOARDING_FILE" "$1" "$2" <<'PY' || true
+import json
+import re
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+
+def normalize(value):
+    match = re.match(r"^[vV]?(\d+)\.(\d+)\.(\d+)", str(value or "").strip())
+    if not match:
+        return None
+    return ".".join(match.groups())
+
+
+path = Path(sys.argv[1])
+from_version = normalize(sys.argv[2])
+to_version = normalize(sys.argv[3])
+if not to_version:
+    raise SystemExit(0)
+release_url = f"https://github.com/kadevin/ilab-gpt-conjure/releases/tag/v{to_version}"
+payload = {
+    "kind": "portable_standard_app_transition",
+    "to_version": to_version,
+    "to_version_label": f"v{to_version}",
+    "updated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    "dismissed": False,
+    "release_url": release_url,
+    "standard_download_url": release_url,
+}
+if from_version:
+    payload["from_version"] = from_version
+    payload["from_version_label"] = f"v{from_version}"
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
 }
 
 version_is_current_or_newer() {
@@ -139,7 +222,7 @@ PY
 
 if [[ ! -x "$PYTHON_BIN" ]]; then
   echo "Portable Python was not found at ${PYTHON_BIN}." >&2
-  read -r "?Press Enter to close..."
+  pause_to_close
   exit 1
 fi
 
@@ -150,55 +233,52 @@ echo "Data:   ${DATA_DIR}"
 mkdir -p "$DATA_DIR" "$EXTRACT_DIR"
 
 step "Checking latest release"
-RELEASE_JSON="${TEMP_ROOT}/release.json"
+MANIFEST_JSON="${TEMP_ROOT}/latest.json"
 curl -fsSL \
-  -H "Accept: application/vnd.github+json" \
-  -H "X-GitHub-Api-Version: 2022-11-28" \
+  -H "Accept: application/json" \
   -H "User-Agent: ilab-gpt-conjure-portable-updater" \
-  "$LATEST_RELEASE_URL" \
-  -o "$RELEASE_JSON" || fail_update "Could not fetch latest release metadata."
+  "$LATEST_UPDATE_MANIFEST_URL" \
+  -o "$MANIFEST_JSON" || fail_update "Could not fetch update manifest."
 
-ASSET_INFO="$("$PYTHON_BIN" - "$RELEASE_JSON" "$ASSET_PREFIX" "$PACKAGE_ARCH" <<'PY'
+if [[ ! -x "$LAUNCHER_BIN" ]]; then
+  fail_update "Could not verify update manifest because the tray launcher was not found."
+fi
+"$LAUNCHER_BIN" --verify-update-manifest "$MANIFEST_JSON" \
+  || fail_update "Update manifest signature verification failed."
+
+ASSET_INFO="$("$PYTHON_BIN" - "$MANIFEST_JSON" "$PLATFORM_KEY" "$ASSET_PREFIX" <<'PY'
 import json
 import sys
 
-release_path, prefix, arch = sys.argv[1], sys.argv[2], sys.argv[3]
-with open(release_path, "r", encoding="utf-8") as handle:
-    release = json.load(handle)
+manifest_path, platform_key, prefix = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(manifest_path, "r", encoding="utf-8") as handle:
+    manifest = json.load(handle)
 
-zip_asset = None
-for asset in release.get("assets", []):
-    name = asset.get("name", "")
-    if name.startswith(prefix) and name.endswith(".zip"):
-        zip_asset = asset
-        break
+platform = manifest.get("platforms", {}).get(platform_key)
+if not isinstance(platform, dict):
+    raise SystemExit(f"missing update manifest platform entry: {platform_key}")
 
-if not zip_asset:
-    raise SystemExit(f"missing macOS {arch} portable asset in {release.get('tag_name', 'latest release')}")
+asset_name = str(platform.get("asset") or "")
+url = str(platform.get("url") or "")
+sha256 = str(platform.get("sha256") or "").lower()
+if not asset_name.startswith(prefix) or not asset_name.endswith(".zip"):
+    raise SystemExit(f"manifest asset does not match expected macOS portable package: {asset_name}")
+if not url:
+    raise SystemExit(f"manifest platform {platform_key} does not include url")
+if len(sha256) != 64 or any(ch not in "0123456789abcdef" for ch in sha256):
+    raise SystemExit(f"manifest platform {platform_key} does not include a valid sha256")
 
-hash_name = f"{zip_asset['name']}.sha256.txt"
-hash_asset = None
-for asset in release.get("assets", []):
-    if asset.get("name") == hash_name:
-        hash_asset = asset
-        break
-
-if not hash_asset:
-    raise SystemExit(f"missing SHA256 file for {zip_asset['name']}")
-
-print(release.get("tag_name", ""))
-print(zip_asset["name"])
-print(zip_asset["browser_download_url"])
-print(hash_asset["name"])
-print(hash_asset["browser_download_url"])
+print(manifest.get("version", ""))
+print(asset_name)
+print(url)
+print(sha256)
 PY
-)" || fail_update "Could not resolve release asset."
+)" || fail_update "Could not resolve update manifest asset."
 
 RELEASE_TAG="$(printf "%s\n" "$ASSET_INFO" | sed -n '1p')"
 ZIP_NAME="$(printf "%s\n" "$ASSET_INFO" | sed -n '2p')"
 ZIP_URL="$(printf "%s\n" "$ASSET_INFO" | sed -n '3p')"
-HASH_NAME="$(printf "%s\n" "$ASSET_INFO" | sed -n '4p')"
-HASH_URL="$(printf "%s\n" "$ASSET_INFO" | sed -n '5p')"
+EXPECTED_HASH="$(printf "%s\n" "$ASSET_INFO" | sed -n '4p')"
 
 CURRENT_VERSION="$(current_portable_version)"
 if [[ "$(version_is_current_or_newer "$CURRENT_VERSION" "$RELEASE_TAG")" == "1" ]]; then
@@ -206,7 +286,7 @@ if [[ "$(version_is_current_or_newer "$CURRENT_VERSION" "$RELEASE_TAG")" == "1" 
   echo ""
   echo "Already up to date (${RELEASE_TAG})."
   echo "No app files were changed."
-  read -r "?Press Enter to close..."
+  pause_to_close
   exit 0
 fi
 
@@ -218,21 +298,18 @@ else
 fi
 echo "Latest version:  ${RELEASE_TAG}"
 echo "Release asset:   ${ZIP_NAME}"
-echo "SHA256 file:     ${HASH_NAME}"
+echo "Manifest SHA256: ${EXPECTED_HASH}"
 echo "Download URL:    ${ZIP_URL}"
 echo ""
-echo "Close the WebUI server window before updating."
-read -r "?Press Enter to continue..."
+echo "Quit the menu bar launcher and close any WebUI server window before updating."
+pause_to_continue
 
 ZIP_PATH="${TEMP_ROOT}/${ZIP_NAME}"
-HASH_PATH="${TEMP_ROOT}/${HASH_NAME}"
 
 step "Downloading ${RELEASE_TAG}"
 curl -fL --show-error --output "$ZIP_PATH" "$ZIP_URL" || fail_update "Could not download update zip."
-curl -fL --show-error --output "$HASH_PATH" "$HASH_URL" || fail_update "Could not download SHA256 file."
 
 step "Verifying SHA256"
-EXPECTED_HASH="$(awk '{print tolower($1); exit}' "$HASH_PATH")"
 ACTUAL_HASH="$(shasum -a 256 "$ZIP_PATH" | awk '{print tolower($1)}')"
 if [[ "$EXPECTED_HASH" != "$ACTUAL_HASH" ]]; then
   fail_update "SHA256 mismatch. Expected ${EXPECTED_HASH} but got ${ACTUAL_HASH}."
@@ -252,13 +329,18 @@ if [[ ! -d "${NEW_ROOT}/app" ]]; then
   fi
 fi
 
-for required_item in "app" "python" "Start WebUI Portable.command" "portable-version.txt"; do
+for required_item in "app" "python" "Start iLab GPT CONJURE.app" "portable-version.txt"; do
   if [[ ! -e "${NEW_ROOT}/${required_item}" ]]; then
     fail_update "Downloaded package is missing required item: ${required_item}"
   fi
 done
 
 mkdir -p "$BACKUP_DIR"
+
+if [[ "$AUTO_INSTALL" == "1" ]]; then
+  echo "Waiting for the current launcher process to exit before replacing files."
+  sleep 2
+fi
 
 step "Backing up current app files"
 for item in "${REPLACE_ITEMS[@]}"; do
@@ -291,10 +373,16 @@ chmod +x "${BUNDLE_DIR}/Start WebUI Portable.command" 2>/dev/null || true
 chmod +x "${BUNDLE_DIR}/Update WebUI Portable.command" 2>/dev/null || true
 xattr -dr com.apple.quarantine "$BUNDLE_DIR" 2>/dev/null || true
 clear_update_notice
+write_post_update_onboarding_notice "$CURRENT_VERSION" "$RELEASE_TAG"
 
 step "Update complete"
 echo "Updated to ${RELEASE_TAG}."
 echo "Data was preserved at ${DATA_DIR}"
 echo "Backup was saved at ${BACKUP_DIR}"
-echo "Start the WebUI again with Start WebUI Portable.command."
-read -r "?Press Enter to close..."
+if [[ "$RESTART_LAUNCHER" == "1" && -d "${BUNDLE_DIR}/Start iLab GPT CONJURE.app" ]]; then
+  echo "Restarting Start iLab GPT CONJURE.app."
+  open "${BUNDLE_DIR}/Start iLab GPT CONJURE.app" || true
+else
+  echo "Start the WebUI again with Start iLab GPT CONJURE.app."
+fi
+pause_to_close

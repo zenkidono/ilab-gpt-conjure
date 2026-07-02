@@ -90,6 +90,9 @@ from .schemas import (
 )
 from .startup_auth import AUTH_SOURCES, detect_startup_auth_source
 
+SUPPORTED_LOCALES = ("zh-CN", "zh-TW", "zh-HK", "ja", "ko", "en", "es", "pt", "fr", "de", "ru", "it", "hi")
+_SUPPORTED_LOCALE_BY_LOWER = {locale.lower(): locale for locale in SUPPORTED_LOCALES}
+
 
 def _default_auth_source() -> str:
     return detect_startup_auth_source()
@@ -99,6 +102,13 @@ class WebUISettings:
     def __init__(self, path: Path) -> None:
         self.path = path
 
+    def _read_payload(self) -> dict[str, Any]:
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
     def read_paths(self) -> dict[str, Path]:
         defaults = {
             "input_root": DEFAULT_WEBUI_INPUT_ROOT,
@@ -106,11 +116,8 @@ class WebUISettings:
             "gallery_root": DEFAULT_WEBUI_GALLERY_ROOT,
             "source_data_root": DEFAULT_WEBUI_SOURCE_DATA_ROOT,
         }
-        try:
-            payload = json.loads(self.path.read_text(encoding="utf-8"))
-        except (FileNotFoundError, json.JSONDecodeError, OSError):
-            return defaults
-        if not isinstance(payload, dict):
+        payload = self._read_payload()
+        if not payload:
             return defaults
         try:
             paths = {
@@ -122,6 +129,9 @@ class WebUISettings:
             return defaults
         return paths
 
+    def read_locale(self) -> str | None:
+        return _settings_locale(self._read_payload().get("locale"), allow_empty=True)
+
     def write_paths(self, payload: dict[str, Any]) -> dict[str, Path]:
         current = self.read_paths()
         paths = {
@@ -131,9 +141,21 @@ class WebUISettings:
             "source_data_root": _settings_path(payload.get("source_data_root"), current["source_data_root"]),
         }
         _validate_webui_paths(paths)
+        locale = self.read_locale()
+        persisted: dict[str, str] = {key: str(value) for key, value in paths.items()}
+        if locale:
+            persisted["locale"] = locale
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps({key: str(value) for key, value in paths.items()}, indent=2, ensure_ascii=False), encoding="utf-8")
+        self.path.write_text(json.dumps(persisted, indent=2, ensure_ascii=False), encoding="utf-8")
         return paths
+
+    def write_locale(self, locale: Any) -> str:
+        normalized = _settings_locale(locale)
+        payload = self._read_payload()
+        payload["locale"] = normalized
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        return normalized
 
 
 def _settings_path(value: Any, default: Path) -> Path:
@@ -141,6 +163,30 @@ def _settings_path(value: Any, default: Path) -> Path:
     if not raw:
         raise ValueError("Directory path cannot be empty")
     return Path(raw).expanduser()
+
+
+def _settings_locale(value: Any, *, allow_empty: bool = False) -> str | None:
+    raw = str(value or "").strip()
+    if not raw:
+        if allow_empty:
+            return None
+        raise ValueError("Unsupported locale")
+    normalized = raw.replace("_", "-").split(".", 1)[0].lower()
+    exact = _SUPPORTED_LOCALE_BY_LOWER.get(normalized)
+    if exact:
+        return exact
+    if normalized.startswith(("zh-hk", "zh-mo")):
+        return "zh-HK"
+    if normalized.startswith("zh-tw") or normalized.startswith("zh-hant"):
+        return "zh-TW"
+    if normalized.startswith(("zh-cn", "zh-sg", "zh-hans")) or normalized == "zh":
+        return "zh-CN"
+    for locale in ("ja", "ko", "en", "es", "pt", "fr", "de", "ru", "it", "hi"):
+        if normalized.startswith(locale):
+            return locale
+    if allow_empty:
+        return None
+    raise ValueError("Unsupported locale")
 
 
 def _validate_webui_paths(paths: dict[str, Path]) -> None:

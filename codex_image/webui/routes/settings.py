@@ -7,7 +7,7 @@ from fastapi import Body, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from codex_image.webui.context import WebUIContext
-from codex_image.webui.app_version import app_version_payload, open_portable_updater
+from codex_image.webui.app_version import app_version_payload, dismiss_post_update_onboarding, open_portable_updater
 from codex_image.webui.settings_store import (
     MAX_COLOR_IMPORT_BYTES,
     MAX_PROMPT_TEMPLATE_IMPORT_BYTES,
@@ -47,6 +47,13 @@ def register_settings_routes(app: FastAPI, ctx: WebUIContext) -> None:
         except FileNotFoundError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.post("/api/app-version/dismiss-onboarding")
+    def dismiss_app_version_onboarding() -> dict[str, Any]:
+        try:
+            return dismiss_post_update_onboarding(ctx.output_root)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/api/settings")
     def get_settings() -> dict[str, Any]:
         return {
@@ -55,17 +62,31 @@ def register_settings_routes(app: FastAPI, ctx: WebUIContext) -> None:
                 "output_root": str(ctx.output_root),
                 "gallery_root": str(ctx.gallery_root),
                 "source_data_root": str(ctx.source_data_root),
+                "locale": ctx.webui_settings.read_locale(),
             },
             "restart_required": False,
         }
 
     @app.patch("/api/settings")
     def update_settings(payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+        path_keys = {"input_root", "output_root", "gallery_root", "source_data_root"}
+        restart_required = any(key in payload for key in path_keys)
         try:
-            saved = ctx.webui_settings.write_paths(payload)
+            if restart_required:
+                saved = ctx.webui_settings.write_paths(payload)
+            else:
+                saved = {
+                    "input_root": ctx.input_root,
+                    "output_root": ctx.output_root,
+                    "gallery_root": ctx.gallery_root,
+                    "source_data_root": ctx.source_data_root,
+                }
+            locale = ctx.webui_settings.write_locale(payload["locale"]) if "locale" in payload else ctx.webui_settings.read_locale()
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        return {"settings": {key: str(value) for key, value in saved.items()}, "restart_required": True}
+        settings = {key: str(value) for key, value in saved.items()}
+        settings["locale"] = locale
+        return {"settings": settings, "restart_required": restart_required}
 
     @app.get("/api/color-palette")
     def get_color_palette() -> dict[str, Any]:

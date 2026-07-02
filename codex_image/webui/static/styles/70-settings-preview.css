@@ -2168,7 +2168,7 @@ body.lightbox-open {
 }
 
 .version-modal-panel {
-  width: min(430px, 94vw);
+  width: min(520px, 94vw);
 }
 
 .system-settings-modal-panel {
@@ -2254,8 +2254,47 @@ body.lightbox-open {
   font-weight: 650;
 }
 
+.version-onboarding {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--primary-light);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.version-onboarding.hidden {
+  display: none;
+}
+
+.version-onboarding strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.version-onboarding p {
+  margin: 0;
+}
+
+.version-onboarding ul {
+  display: grid;
+  gap: 5px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.version-onboarding li::marker {
+  color: var(--primary);
+}
+
 .version-modal-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
   margin-top: 16px;
@@ -2266,6 +2305,10 @@ body.lightbox-open {
   width: auto;
   min-width: 112px;
   height: 34px;
+}
+
+.version-modal-actions .hidden {
+  display: none;
 }
 
 .api-settings-feedback {
@@ -3099,26 +3142,77 @@ body.lightbox-open {
 .codex-channel-notes {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  gap: 8px;
 }
 
 .codex-channel-note {
+  appearance: none;
+  min-width: 0;
   display: grid;
   gap: 4px;
   padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--motion-base),
+    border-color var(--motion-base),
+    box-shadow var(--motion-base),
+    color var(--motion-base);
 }
 
-.codex-channel-note + .codex-channel-note {
-  border-left: 1px solid var(--line);
+.codex-channel-note:hover,
+.codex-channel-note:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--line));
+  background: color-mix(in srgb, var(--primary-light) 34%, var(--surface));
+}
+
+.codex-channel-note:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 52%, transparent);
+  outline-offset: 2px;
+}
+
+.codex-channel-note.active {
+  border-color: color-mix(in srgb, var(--primary) 66%, var(--line));
+  background: var(--primary-light);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.codex-channel-note-header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
 }
 
 .codex-channel-note strong {
   color: var(--text);
   font-size: 13px;
+  line-height: 1.35;
 }
 
-.codex-channel-note span {
+.codex-channel-current {
+  display: none;
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.codex-channel-note.active .codex-channel-current {
+  display: inline-flex;
+}
+
+.codex-channel-note > span:not(.codex-channel-note-header) {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.5;
@@ -3131,6 +3225,12 @@ body.lightbox-open {
   justify-content: flex-end;
   margin-top: 16px;
   padding-top: 16px;
+}
+
+.settings-modal-actions.settings-status-only {
+  justify-content: flex-start;
+  margin-top: 12px;
+  padding-top: 0;
 }
 
 .settings-action-status {

@@ -1029,17 +1029,26 @@ function historyTaskSourceLabel(task: Partial<HistoryTask> & Record<string, any>
     || task.request?.api_provider_name
     || "",
   ).trim();
-  if (provider) return provider;
-  return historyBackendDisplayLabel(task.backend);
+  const backend = historyBackendDisplayLabel(task.backend);
+  const channel = historyBackendChannelLabel(task.backend);
+  if (provider) return [provider, channel].filter(Boolean).join(" · ");
+  return backend;
 }
 
 function historyBackendDisplayLabel(backend: unknown): string {
   const value = String(backend || "").trim();
-  if (value === "codex_images") return "Codex";
-  if (value === "codex_responses") return "Responses";
-  if (value === "openai_images") return "OpenAI";
-  if (value === "openai_responses") return "Responses";
+  if (value === "codex_images") return "Codex Image";
+  if (value === "codex_responses") return "Codex Responses";
+  if (value === "openai_images") return "API Image";
+  if (value === "openai_responses") return "API Responses";
   return value;
+}
+
+function historyBackendChannelLabel(backend: unknown): string {
+  const value = String(backend || "").trim();
+  if (value === "openai_images") return "Image";
+  if (value === "openai_responses") return "Responses";
+  return "";
 }
 
 function historyThumbnailRatioStyle(task: HistoryTask): string {

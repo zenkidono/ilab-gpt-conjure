@@ -45,6 +45,7 @@ $GetPipUrl = "https://bootstrap.pypa.io/get-pip.py"
 
 $AppItems = @(
   "codex_image",
+  "launcher",
   "assets",
   "requirements-webui.txt",
   "package.json",
@@ -79,7 +80,7 @@ function Remove-LocalArtifacts {
     [string]$Root
   )
 
-  $Names = @("__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".DS_Store")
+  $Names = @("__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".DS_Store", "target")
   foreach ($Name in $Names) {
     Get-ChildItem -Path $Root -Recurse -Force -ErrorAction SilentlyContinue |
       Where-Object { $_.Name -eq $Name } |
@@ -178,9 +179,26 @@ if (-not (Test-Path $CertifiCaBundle)) {
 & $PythonExe -m pip freeze | Set-Content -Path (Join-Path $BundleRoot "python-requirements.lock.txt") -Encoding UTF8
 & $PythonExe -c "import fastapi, uvicorn, multipart, httpx, PIL; import portable_webui_app; print('portable import ok')"
 
+if ($null -eq (Get-Command cargo -ErrorAction SilentlyContinue)) {
+  throw "cargo was not found. Install Rust toolchain before building the portable tray launcher."
+}
+& cargo build --manifest-path (Join-Path $RepoRoot "launcher\Cargo.toml") --release --locked
+if ($LASTEXITCODE -ne 0) {
+  throw "Rust tray launcher build failed."
+}
+$LauncherExe = Join-Path $RepoRoot "launcher\target\release\ilab-conjure-launcher.exe"
+if (-not (Test-Path $LauncherExe)) {
+  throw "Rust tray launcher binary was not found at $LauncherExe"
+}
+Copy-Item -Path $LauncherExe -Destination (Join-Path $BundleRoot "Start iLab GPT CONJURE.exe") -Force
+
 Compress-Archive -Path (Join-Path $BundleRoot "*") -DestinationPath $ZipPath -CompressionLevel Optimal
 $Hash = Get-FileHash -Path $ZipPath -Algorithm SHA256
-"$($Hash.Hash.ToLowerInvariant())  $(Split-Path -Leaf $ZipPath)" | Set-Content -Path $HashPath -Encoding ASCII
+[System.IO.File]::WriteAllText(
+  $HashPath,
+  "$($Hash.Hash.ToLowerInvariant())  $(Split-Path -Leaf $ZipPath)`n",
+  [System.Text.Encoding]::ASCII
+)
 
 $Manifest = [ordered]@{
   project = $ProjectName
