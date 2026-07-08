@@ -18,14 +18,15 @@ native dialog with the app version, open-source project URL, and an update
 check button.
 
 The update checker reads the published signed `latest.json` manifest from the
-latest GitHub Release, verifies its Ed25519 signature with the bundled public
-key, compares the local portable/source version with the manifest version, and
-offers to open the release page. In a portable package, the Install Update
-action starts the bundled updater in automatic mode, exits the current
-launcher, lets the updater download and SHA256-verify the matching zip, replace
-package-managed files while preserving `data/`, and restart the launcher.
-Source checkouts do not have a package updater, so they fall back to opening the
-release page.
+latest GitHub Release, verifies its Ed25519 signatures with the bundled public
+key, and compares the local portable/standard/source version with the manifest
+version. In a standard app package, Download Update opens the matching DMG or
+standard App ZIP so the user can quit the current app and install it over the old
+one. In a portable package, Install Update starts the bundled updater in
+automatic mode, exits the current launcher, lets the updater download and
+SHA256-verify the matching zip, replace package-managed files while preserving
+`data/`, and restart the launcher. Source checkouts do not have a package
+updater, so they fall back to opening the release page.
 
 The launcher does not replace the Python WebUI backend. It wraps startup,
 process lifetime, browser opening, signed update checking, updater handoff, and

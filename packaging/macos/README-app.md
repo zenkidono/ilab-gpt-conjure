@@ -18,5 +18,6 @@ The app is not notarized. If Gatekeeper blocks first launch, right-click
 or Control-click iLab GPT CONJURE.app, choose Open, and confirm the system
 prompt.
 
-The standard app checks for updates by opening the GitHub Release page. Automatic
-self-replacement is intentionally limited to portable packages.
+The standard app checks the signed update manifest and opens the matching DMG
+download when a new version is available. Automatic self-replacement is
+intentionally limited to portable packages.

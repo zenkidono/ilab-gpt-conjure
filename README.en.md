@@ -152,15 +152,15 @@ http://127.0.0.1:8787/
 ## App packages
 
 Download the current packages from [Downloads / Releases](RELEASES.md), or open
-[GitHub Release v0.5.6](https://github.com/kadevin/ilab-gpt-conjure/releases/tag/v0.5.6)
+[GitHub Release v0.5.7](https://github.com/kadevin/ilab-gpt-conjure/releases/tag/v0.5.7)
 directly.
 
 New users should choose the standard packages:
 
-1. macOS: download `iLab-GPT-CONJURE-macos-arm64-0.5.6.dmg`
-   for Apple Silicon or `iLab-GPT-CONJURE-macos-x64-0.5.6.dmg`
+1. macOS: download `iLab-GPT-CONJURE-macos-arm64-0.5.7.dmg`
+   for Apple Silicon or `iLab-GPT-CONJURE-macos-x64-0.5.7.dmg`
    for Intel, then drag `iLab GPT CONJURE.app` to Applications.
-2. Windows: download `iLab-GPT-CONJURE-windows-x64_0.5.6.zip`,
+2. Windows: download `iLab-GPT-CONJURE-windows-x64_0.5.7.zip`,
    extract it into a normal user directory, and run `iLab GPT CONJURE.exe`.
 
 Standard packages store user data in `~/Library/Application Support/iLab GPT
@@ -224,7 +224,7 @@ Release packaging is intentionally separate from CI: the `Portable Release`
 workflow runs only after the `CI` workflow has completed successfully on a push
 to `main`, then builds standard packages, portable packages, and SHA256 files as
 workflow artifacts. If the commit is tagged with a `v*` tag, the release job
-also builds signed portable-only `latest.json` using the
+also builds signed `latest.json` using the
 `ILAB_CONJURE_UPDATE_SIGNING_PRIVATE_KEY_B64` secret and uploads all packages,
 SHA256 files, and the update manifest to that GitHub Release. For a tagged
 commit that already passed CI, the same workflow can also be run manually with

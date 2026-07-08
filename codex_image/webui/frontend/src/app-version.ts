@@ -13,9 +13,10 @@ interface PostUpdateOnboarding {
 interface AppVersionPayload {
   current_version_label?: string;
   latest_version_label?: string;
-  source?: "portable" | "source" | string;
+  source?: "portable" | "standard_app" | "source" | string;
   update_available?: boolean;
   release_url?: string;
+  standard_download_url?: string | null;
   updater_available?: boolean;
   post_update_onboarding?: PostUpdateOnboarding | null;
 }
@@ -56,6 +57,13 @@ function renderAppVersion(statusText?: string): void {
   const updateAvailable = Boolean(payload?.update_available);
   const onboarding = payload?.post_update_onboarding || null;
   const onboardingVersion = onboarding?.to_version_label || currentLabel;
+  const isPortable = payload?.source === "portable";
+  const isStandardApp = payload?.source === "standard_app";
+  const standardDownloadUrl =
+    onboarding?.standard_download_url ||
+    payload?.standard_download_url ||
+    "";
+  const showStandardDownload = Boolean(onboarding || (isStandardApp && updateAvailable && standardDownloadUrl));
   const updateAvailableText = formatTranslation("footer.updateAvailable", { version: latestLabel });
 
   if (versionLabel) {
@@ -73,7 +81,7 @@ function renderAppVersion(statusText?: string): void {
   if (current) current.textContent = currentLabel;
   if (latest) latest.textContent = latestLabel;
   if (source) {
-    source.textContent = payload?.source === "portable" ? translate("version.sourcePortable") : translate("version.sourceSource");
+    source.textContent = runtimeSourceLabel(payload?.source);
   }
   if (releaseLink) {
     releaseLink.href = payload?.release_url || "https://github.com/kadevin/ilab-gpt-conjure/releases";
@@ -88,8 +96,8 @@ function renderAppVersion(statusText?: string): void {
     onboardingBody.textContent = translate("version.onboardingBody");
   }
   if (standardDownloadLink) {
-    standardDownloadLink.classList.toggle("hidden", !onboarding);
-    standardDownloadLink.href = onboarding?.standard_download_url || onboarding?.release_url || payload?.release_url || "https://github.com/kadevin/ilab-gpt-conjure/releases";
+    standardDownloadLink.classList.toggle("hidden", !showStandardDownload);
+    standardDownloadLink.href = standardDownloadUrl || onboarding?.release_url || payload?.release_url || "https://github.com/kadevin/ilab-gpt-conjure/releases";
   }
   if (continuePortableButton) {
     continuePortableButton.classList.toggle("hidden", !onboarding);
@@ -98,6 +106,7 @@ function renderAppVersion(statusText?: string): void {
     dismissOnboardingButton.classList.toggle("hidden", !onboarding);
   }
   if (updateButton) {
+    updateButton.classList.toggle("hidden", !isPortable);
     updateButton.disabled = !(payload?.update_available && payload?.updater_available);
   }
   if (modalStatus) {
@@ -106,11 +115,19 @@ function renderAppVersion(statusText?: string): void {
       (onboarding
         ? formatTranslation("version.onboardingStatus", { version: onboardingVersion })
         : updateAvailable
-          ? formatTranslation("version.updateAvailable", { version: latestLabel })
-          : payload?.updater_available === false && payload?.source !== "portable"
+          ? formatTranslation(isStandardApp ? "version.standardUpdateAvailable" : "version.updateAvailable", { version: latestLabel })
+          : isStandardApp
+            ? translate("version.standardManualInstall")
+            : payload?.updater_available === false && !isPortable
             ? translate("version.noUpdater")
             : translate("version.upToDate"));
   }
+}
+
+function runtimeSourceLabel(source: AppVersionPayload["source"]): string {
+  if (source === "portable") return translate("version.sourcePortable");
+  if (source === "standard_app") return translate("version.sourceStandard");
+  return translate("version.sourceSource");
 }
 
 async function refreshAppVersion(): Promise<void> {
@@ -173,7 +190,7 @@ function bindAppVersionEvents(): void {
     void openUpdater();
   });
   (els().versionStandardDownloadLink as HTMLElement | null)?.addEventListener("click", () => {
-    void dismissOnboarding(false);
+    if (payload?.post_update_onboarding) void dismissOnboarding(false);
   });
   (els().versionContinuePortableButton as HTMLElement | null)?.addEventListener("click", () => {
     void dismissOnboarding(true);

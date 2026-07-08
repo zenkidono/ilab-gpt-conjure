@@ -14,5 +14,6 @@ before copying it into the standard app data directory. Migration copies portabl
 data only; it does not move or delete the old `data\` folder, and it will not
 overwrite an existing standard data directory.
 
-The standard app checks for updates by opening the GitHub Release page. Automatic
+The standard app checks the signed update manifest and opens the matching
+standard App ZIP download when a new version is available. Automatic
 self-replacement is intentionally limited to portable packages.

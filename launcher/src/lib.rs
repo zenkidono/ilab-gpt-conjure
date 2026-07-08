@@ -328,6 +328,8 @@ pub struct UpdateLabels {
     pub check_failed: &'static str,
     pub install_update: &'static str,
     pub install_note: &'static str,
+    pub download_update: &'static str,
+    pub download_note: &'static str,
     pub open_release: &'static str,
     pub close: &'static str,
 }
@@ -344,6 +346,8 @@ pub fn localized_update_labels(locale: AppLocale) -> UpdateLabels {
             check_failed: "无法检查更新",
             install_update: "安装更新",
             install_note: "点击“安装更新”会退出启动器，由更新器替换程序文件并保留 data/。",
+            download_update: "下载新版",
+            download_note: "点击“下载新版”会打开标准安装包下载。下载完成后退出当前 App，再用新版包覆盖安装。",
             open_release: "打开发行页",
             close: "关闭",
         },
@@ -357,6 +361,8 @@ pub fn localized_update_labels(locale: AppLocale) -> UpdateLabels {
             check_failed: "無法檢查更新",
             install_update: "安裝更新",
             install_note: "點擊「安裝更新」會結束啟動器，由更新器替換程式檔案並保留 data/。",
+            download_update: "下載新版",
+            download_note: "點擊「下載新版」會開啟標準安裝包下載。下載完成後結束目前 App，再用新版包覆蓋安裝。",
             open_release: "開啟發行頁",
             close: "關閉",
         },
@@ -372,6 +378,9 @@ pub fn localized_update_labels(locale: AppLocale) -> UpdateLabels {
             install_update: "Install Update",
             install_note:
                 "Install Update will quit the launcher, replace app files, and preserve data/.",
+            download_update: "Download Update",
+            download_note:
+                "Download Update opens the standard app package. After it downloads, quit this app and install the new package over the old one.",
             open_release: "Open Release",
             close: "Close",
         },
@@ -399,7 +408,9 @@ struct UpdateManifest {
     release_url: String,
     notes: String,
     signature: Option<UpdateSignature>,
+    standard_signature: Option<UpdateSignature>,
     platforms: BTreeMap<String, UpdatePlatform>,
+    standard_platforms: BTreeMap<String, UpdatePlatform>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -407,6 +418,20 @@ enum UpdateAvailability {
     UpToDate,
     UpdateAvailable,
     UnknownCurrentVersion,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UpdatePackageKind {
+    Portable,
+    Standard,
+    Source,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UpdateInstallAction {
+    None,
+    PortableUpdater,
+    DownloadPackage,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -714,29 +739,65 @@ fn parse_update_manifest_payload(payload: &str) -> Result<UpdateManifest> {
         .unwrap_or("")
         .trim()
         .to_string();
-    let signature = value.get("signature").and_then(|field| {
-        let object = field.as_object()?;
-        let algorithm = object
-            .get("algorithm")
-            .and_then(|field| field.as_str())
-            .map(str::trim)
-            .filter(|field| !field.is_empty())?;
-        let value = object
-            .get("value")
-            .and_then(|field| field.as_str())
-            .map(str::trim)
-            .filter(|field| !field.is_empty())?;
-        Some(UpdateSignature {
-            algorithm: algorithm.to_string(),
-            value: value.to_string(),
-        })
-    });
+    let signature = parse_update_signature(value.get("signature"));
+    let standard_signature = parse_update_signature(value.get("standard_signature"));
+    let platforms = parse_update_platforms(value.get("platforms"), "platforms")?;
+    let standard_platforms =
+        parse_optional_update_platforms(value.get("standard_platforms"), "standard_platforms")?;
+    if platforms.is_empty() {
+        return Err(anyhow!(
+            "update manifest did not include any usable platform entries"
+        ));
+    }
 
+    Ok(UpdateManifest {
+        schema_version,
+        version,
+        release_url,
+        notes,
+        signature,
+        standard_signature,
+        platforms,
+        standard_platforms,
+    })
+}
+
+fn parse_update_signature(value: Option<&serde_json::Value>) -> Option<UpdateSignature> {
+    let object = value?.as_object()?;
+    let algorithm = object
+        .get("algorithm")
+        .and_then(|field| field.as_str())
+        .map(str::trim)
+        .filter(|field| !field.is_empty())?;
+    let value = object
+        .get("value")
+        .and_then(|field| field.as_str())
+        .map(str::trim)
+        .filter(|field| !field.is_empty())?;
+    Some(UpdateSignature {
+        algorithm: algorithm.to_string(),
+        value: value.to_string(),
+    })
+}
+
+fn parse_optional_update_platforms(
+    value: Option<&serde_json::Value>,
+    field_name: &str,
+) -> Result<BTreeMap<String, UpdatePlatform>> {
+    match value {
+        Some(_) => parse_update_platforms(value, field_name),
+        None => Ok(BTreeMap::new()),
+    }
+}
+
+fn parse_update_platforms(
+    value: Option<&serde_json::Value>,
+    field_name: &str,
+) -> Result<BTreeMap<String, UpdatePlatform>> {
     let mut platforms = BTreeMap::new();
     let platform_values = value
-        .get("platforms")
         .and_then(|field| field.as_object())
-        .ok_or_else(|| anyhow!("update manifest did not include platforms"))?;
+        .ok_or_else(|| anyhow!("update manifest did not include {field_name}"))?;
     for (key, platform) in platform_values {
         let Some(url) = platform
             .get("url")
@@ -784,39 +845,34 @@ fn parse_update_manifest_payload(payload: &str) -> Result<UpdateManifest> {
             },
         );
     }
-    if platforms.is_empty() {
-        return Err(anyhow!(
-            "update manifest did not include any usable platform entries"
-        ));
-    }
-
-    Ok(UpdateManifest {
-        schema_version,
-        version,
-        release_url,
-        notes,
-        signature,
-        platforms,
-    })
+    Ok(platforms)
 }
 
 fn is_sha256_hex(value: &str) -> bool {
     value.len() == 64 && value.chars().all(|ch| ch.is_ascii_hexdigit())
 }
 
-fn update_check_from_manifest(current_version: &str, manifest: &UpdateManifest) -> UpdateCheck {
+fn update_check_from_manifest(
+    current_version: &str,
+    manifest: &UpdateManifest,
+    package_kind: UpdatePackageKind,
+) -> UpdateCheck {
     let latest_version = version_label_from_raw(&manifest.version);
     let availability = match compare_version_labels(current_version, &latest_version) {
         Some(Ordering::Less) => UpdateAvailability::UpdateAvailable,
         Some(Ordering::Equal | Ordering::Greater) => UpdateAvailability::UpToDate,
         None => UpdateAvailability::UnknownCurrentVersion,
     };
+    let platform_map = match package_kind {
+        UpdatePackageKind::Portable => &manifest.platforms,
+        UpdatePackageKind::Standard => &manifest.standard_platforms,
+        UpdatePackageKind::Source => &manifest.platforms,
+    };
     UpdateCheck {
         current_version: current_version.to_string(),
         latest_version,
         release_url: manifest.release_url.clone(),
-        download_url: manifest
-            .platforms
+        download_url: platform_map
             .get(current_update_platform_key())
             .map(|platform| platform.url.clone()),
         availability,
@@ -838,10 +894,32 @@ fn verify_update_manifest_signature_with_key(
     manifest: &UpdateManifest,
     public_key_b64: &str,
 ) -> Result<()> {
-    let signature = manifest
-        .signature
-        .as_ref()
-        .ok_or_else(|| anyhow!("update manifest is missing signature"))?;
+    verify_signature_with_key(
+        manifest
+            .signature
+            .as_ref()
+            .ok_or_else(|| anyhow!("update manifest is missing signature"))?,
+        update_manifest_signing_payload(manifest).as_bytes(),
+        public_key_b64,
+    )?;
+    if !manifest.standard_platforms.is_empty() {
+        verify_signature_with_key(
+            manifest
+                .standard_signature
+                .as_ref()
+                .ok_or_else(|| anyhow!("update manifest is missing standard_signature"))?,
+            standard_update_manifest_signing_payload(manifest).as_bytes(),
+            public_key_b64,
+        )?;
+    }
+    Ok(())
+}
+
+fn verify_signature_with_key(
+    signature: &UpdateSignature,
+    payload: &[u8],
+    public_key_b64: &str,
+) -> Result<()> {
     if !signature.algorithm.eq_ignore_ascii_case("ed25519") {
         return Err(anyhow!(
             "unsupported update manifest signature algorithm {}",
@@ -866,10 +944,7 @@ fn verify_update_manifest_signature_with_key(
         .map_err(|_| anyhow!("update manifest signature must be 64 bytes"))?;
     let signature = Signature::from_bytes(&signature_bytes);
     verifying_key
-        .verify(
-            update_manifest_signing_payload(manifest).as_bytes(),
-            &signature,
-        )
+        .verify(payload, &signature)
         .context("update manifest signature verification failed")
 }
 
@@ -884,6 +959,27 @@ fn update_manifest_signing_payload(manifest: &UpdateManifest) -> String {
     push_signing_field(&mut lines, "release_url", &manifest.release_url);
     for (platform_key, platform) in &manifest.platforms {
         push_signing_field(&mut lines, "platform", platform_key);
+        push_signing_field(&mut lines, "asset", &platform.asset);
+        push_signing_field(&mut lines, "url", &platform.url);
+        push_signing_field(&mut lines, "sha256", &platform.sha256);
+        push_signing_field(&mut lines, "package", &platform.package);
+    }
+    let mut payload = lines.join("\n");
+    payload.push('\n');
+    payload
+}
+
+fn standard_update_manifest_signing_payload(manifest: &UpdateManifest) -> String {
+    let mut lines = vec!["ilab-gpt-conjure-standard-update-manifest-v1".to_string()];
+    push_signing_field(
+        &mut lines,
+        "schema_version",
+        &manifest.schema_version.to_string(),
+    );
+    push_signing_field(&mut lines, "version", &manifest.version);
+    push_signing_field(&mut lines, "release_url", &manifest.release_url);
+    for (platform_key, platform) in &manifest.standard_platforms {
+        push_signing_field(&mut lines, "standard_platform", platform_key);
         push_signing_field(&mut lines, "asset", &platform.asset);
         push_signing_field(&mut lines, "url", &platform.url);
         push_signing_field(&mut lines, "sha256", &platform.sha256);
@@ -925,10 +1021,32 @@ fn compare_version_labels(current: &str, latest: &str) -> Option<Ordering> {
     Some(parse_semver_label(current)?.cmp(&parse_semver_label(latest)?))
 }
 
-fn update_check_has_install_action(check: &UpdateCheck, updater_available: bool) -> bool {
+fn update_check_has_install_action(
+    check: &UpdateCheck,
+    install_action: UpdateInstallAction,
+) -> bool {
     check.availability != UpdateAvailability::UpToDate
         && check.download_url.is_some()
-        && updater_available
+        && install_action != UpdateInstallAction::None
+}
+
+fn update_install_button_label(
+    labels: &UpdateLabels,
+    install_action: UpdateInstallAction,
+) -> &'static str {
+    match install_action {
+        UpdateInstallAction::PortableUpdater => labels.install_update,
+        UpdateInstallAction::DownloadPackage => labels.download_update,
+        UpdateInstallAction::None => labels.install_update,
+    }
+}
+
+fn update_install_note(labels: &UpdateLabels, install_action: UpdateInstallAction) -> &'static str {
+    match install_action {
+        UpdateInstallAction::PortableUpdater => labels.install_note,
+        UpdateInstallAction::DownloadPackage => labels.download_note,
+        UpdateInstallAction::None => labels.install_note,
+    }
 }
 
 fn portable_updater_path(config: &LauncherConfig) -> Option<PathBuf> {
@@ -1215,24 +1333,28 @@ fn curl_program() -> &'static str {
 fn show_platform_update_window(
     check: &UpdateCheck,
     labels: &UpdateLabels,
-    updater_available: bool,
+    install_action: UpdateInstallAction,
 ) -> Result<UpdateDialogAction> {
     #[cfg(target_os = "macos")]
     {
-        show_macos_update_window(check, labels, updater_available)
+        show_macos_update_window(check, labels, install_action)
     }
     #[cfg(target_os = "windows")]
     {
-        show_windows_update_window(check, labels, updater_available)
+        show_windows_update_window(check, labels, install_action)
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        eprintln!("{}", update_message(check, labels, updater_available));
+        eprintln!("{}", update_message(check, labels, install_action));
         Ok(UpdateDialogAction::Close)
     }
 }
 
-fn update_message(check: &UpdateCheck, labels: &UpdateLabels, updater_available: bool) -> String {
+fn update_message(
+    check: &UpdateCheck,
+    labels: &UpdateLabels,
+    install_action: UpdateInstallAction,
+) -> String {
     let status = match check.availability {
         UpdateAvailability::UpToDate => labels.up_to_date,
         UpdateAvailability::UpdateAvailable => labels.update_available,
@@ -1246,9 +1368,9 @@ fn update_message(check: &UpdateCheck, labels: &UpdateLabels, updater_available:
         check.latest_version,
         status
     );
-    if update_check_has_install_action(check, updater_available) {
+    if update_check_has_install_action(check, install_action) {
         message.push_str("\n\n");
-        message.push_str(labels.install_note);
+        message.push_str(update_install_note(labels, install_action));
     }
     message
 }
@@ -1257,12 +1379,13 @@ fn update_message(check: &UpdateCheck, labels: &UpdateLabels, updater_available:
 fn show_macos_update_window(
     check: &UpdateCheck,
     labels: &UpdateLabels,
-    updater_available: bool,
+    install_action: UpdateInstallAction,
 ) -> Result<UpdateDialogAction> {
-    let has_install = update_check_has_install_action(check, updater_available);
+    let has_install = update_check_has_install_action(check, install_action);
+    let install_label = update_install_button_label(labels, install_action);
     let mut buttons = vec![labels.close, labels.open_release];
     if has_install {
-        buttons.push(labels.install_update);
+        buttons.push(install_label);
     }
     let buttons_script = buttons
         .iter()
@@ -1270,13 +1393,13 @@ fn show_macos_update_window(
         .collect::<Vec<_>>()
         .join(", ");
     let default_button = if has_install {
-        labels.install_update
+        install_label
     } else {
         labels.open_release
     };
     let script = format!(
         "set dialogResult to display dialog {} with title {} buttons {{{}}} default button {}\nbutton returned of dialogResult",
-        apple_script_string(&update_message(check, labels, updater_available)),
+        apple_script_string(&update_message(check, labels, install_action)),
         apple_script_string(labels.title),
         buttons_script,
         apple_script_string(default_button),
@@ -1300,9 +1423,9 @@ fn show_macos_update_window(
 fn show_windows_update_window(
     check: &UpdateCheck,
     labels: &UpdateLabels,
-    updater_available: bool,
+    install_action: UpdateInstallAction,
 ) -> Result<UpdateDialogAction> {
-    let install_button = if update_check_has_install_action(check, updater_available) {
+    let install_button = if update_check_has_install_action(check, install_action) {
         format!(
             r#"
 $install = New-Object System.Windows.Forms.Button
@@ -1314,7 +1437,7 @@ $install.Top = 145
 $install.Add_Click({{ $form.Tag = 'install-update'; $form.Close() }})
 $form.Controls.Add($install)
 "#,
-            install_update = powershell_string(labels.install_update)
+            install_update = powershell_string(update_install_button_label(labels, install_action))
         )
     } else {
         String::new()
@@ -1360,7 +1483,7 @@ $form.Controls.AddRange(@($message, $release, $close))
 Write-Output $form.Tag
 "#,
         title = powershell_string(labels.title),
-        message = powershell_string(&update_message(check, labels, updater_available)),
+        message = powershell_string(&update_message(check, labels, install_action)),
         open_release = powershell_string(labels.open_release),
         close = powershell_string(labels.close),
         download_button = install_button,
@@ -1384,12 +1507,78 @@ Write-Output $form.Tag
 }
 
 fn update_action_from_button(button: &str, labels: &UpdateLabels) -> UpdateDialogAction {
-    if button == labels.install_update {
+    if button == labels.install_update || button == labels.download_update {
         UpdateDialogAction::InstallUpdate
     } else if button == labels.open_release {
         UpdateDialogAction::OpenRelease
     } else {
         UpdateDialogAction::Close
+    }
+}
+
+fn update_package_kind_for_app(app_dir: &Path) -> UpdatePackageKind {
+    if is_standard_app_dir(app_dir) {
+        UpdatePackageKind::Standard
+    } else if app_dir.file_name().and_then(|name| name.to_str()) == Some("app") {
+        UpdatePackageKind::Portable
+    } else {
+        UpdatePackageKind::Source
+    }
+}
+
+fn update_install_action_for_config(
+    config: &LauncherConfig,
+    check: &UpdateCheck,
+) -> UpdateInstallAction {
+    if check.download_url.is_none() || check.availability == UpdateAvailability::UpToDate {
+        return UpdateInstallAction::None;
+    }
+    if portable_updater_path(config).is_some() {
+        return UpdateInstallAction::PortableUpdater;
+    }
+    if is_standard_app_dir(&config.app_dir) {
+        return UpdateInstallAction::DownloadPackage;
+    }
+    UpdateInstallAction::None
+}
+
+fn update_notice_path(config: &LauncherConfig) -> PathBuf {
+    config.data_dir.join("update-notice.json")
+}
+
+fn sync_update_notice(config: &LauncherConfig, check: &UpdateCheck) -> Result<()> {
+    if check.availability != UpdateAvailability::UpdateAvailable {
+        clear_update_notice(config);
+        return Ok(());
+    }
+    fs::create_dir_all(&config.data_dir)?;
+    let mut payload = serde_json::json!({
+        "current_version": check.current_version.trim_start_matches('v').trim_start_matches('V'),
+        "latest_version": check.latest_version.trim_start_matches('v').trim_start_matches('V'),
+        "checked_at": SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+            .to_string(),
+        "release_url": check.release_url.clone(),
+    });
+    if let Some(download_url) = &check.download_url {
+        payload["download_url"] = serde_json::Value::String(download_url.clone());
+        if is_standard_app_dir(&config.app_dir) {
+            payload["standard_download_url"] = serde_json::Value::String(download_url.clone());
+        }
+    }
+    fs::write(
+        update_notice_path(config),
+        serde_json::to_string_pretty(&payload)? + "\n",
+    )?;
+    Ok(())
+}
+
+fn clear_update_notice(config: &LauncherConfig) {
+    let path = update_notice_path(config);
+    if path.exists() {
+        let _ = fs::remove_file(path);
     }
 }
 
@@ -1441,18 +1630,31 @@ impl WebUiService {
         let current_version = self.config.about_info().version_label;
         let manifest = fetch_update_manifest()
             .with_context(|| format!("{}: {}", labels.check_failed, LATEST_UPDATE_MANIFEST_URL))?;
-        let check = update_check_from_manifest(&current_version, &manifest);
-        let updater_available = portable_updater_path(&self.config).is_some();
-        match show_platform_update_window(&check, &labels, updater_available)? {
+        let package_kind = update_package_kind_for_app(&self.config.app_dir);
+        let check = update_check_from_manifest(&current_version, &manifest, package_kind);
+        sync_update_notice(&self.config, &check)?;
+        let install_action = update_install_action_for_config(&self.config, &check);
+        match show_platform_update_window(&check, &labels, install_action)? {
             UpdateDialogAction::Close => Ok(UpdateOutcome::Continue),
             UpdateDialogAction::OpenRelease => {
                 open::that(&check.release_url).context("failed to open GitHub release page")?;
                 Ok(UpdateOutcome::Continue)
             }
-            UpdateDialogAction::InstallUpdate => {
-                self.launch_portable_updater()?;
-                Ok(UpdateOutcome::LaunchedUpdater)
-            }
+            UpdateDialogAction::InstallUpdate => match install_action {
+                UpdateInstallAction::PortableUpdater => {
+                    self.launch_portable_updater()?;
+                    Ok(UpdateOutcome::LaunchedUpdater)
+                }
+                UpdateInstallAction::DownloadPackage => {
+                    let url = check
+                        .download_url
+                        .as_ref()
+                        .ok_or_else(|| anyhow!("standard package download URL is not available"))?;
+                    open::that(url).context("failed to open update package download")?;
+                    Ok(UpdateOutcome::Continue)
+                }
+                UpdateInstallAction::None => Ok(UpdateOutcome::Continue),
+            },
         }
     }
 
@@ -1556,6 +1758,7 @@ impl WebUiService {
             ])
             .current_dir(&self.config.app_dir)
             .env("ILAB_CONJURE_DATA_DIR", &self.config.data_dir)
+            .env("ILAB_CONJURE_APP_DIR", &self.config.app_dir)
             .env(
                 "APP_LAUNCHER_MODE",
                 launcher_mode_for_app(&self.config.app_dir),
@@ -2517,6 +2720,14 @@ mod tests {
                         "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                         "package": "portable-zip"
                     }
+                },
+                "standard_platforms": {
+                    "darwin-aarch64": {
+                        "asset": "iLab-GPT-CONJURE-macos-arm64-0.6.0.dmg",
+                        "url": "https://example.test/arm64.dmg",
+                        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                        "package": "standard-dmg"
+                    }
                 }
             }"#,
         )
@@ -2529,9 +2740,14 @@ mod tests {
         );
         assert_eq!(manifest.notes, "更新说明");
         assert_eq!(manifest.platforms.len(), 2);
+        assert_eq!(manifest.standard_platforms.len(), 1);
         assert_eq!(
             manifest.platforms["darwin-aarch64"].url,
             "https://example.test/arm64.zip"
+        );
+        assert_eq!(
+            manifest.standard_platforms["darwin-aarch64"].url,
+            "https://example.test/arm64.dmg"
         );
         assert_eq!(
             manifest.platforms["darwin-aarch64"].sha256,
@@ -2555,6 +2771,7 @@ mod tests {
                 algorithm: "ed25519".to_string(),
                 value: "KgkUvdx3azdMzIFWAX2wR5tNrYZWH+k2pfu/sckT/TiNNrlTKL8NYqXJ1vbG5Ko+js92ygATeCZD4PXplAZGCg==".to_string(),
             }),
+            standard_signature: None,
             platforms: [(
                 "darwin-aarch64".to_string(),
                 UpdatePlatform {
@@ -2566,6 +2783,7 @@ mod tests {
                 },
             )]
             .into(),
+            standard_platforms: Default::default(),
         };
 
         verify_update_manifest_signature_with_key(&manifest, public_key).unwrap();
@@ -2585,6 +2803,7 @@ mod tests {
             release_url: "https://example.test/release".to_string(),
             notes: String::new(),
             signature: None,
+            standard_signature: None,
             platforms: [
                 (
                     "unsupported-platform".to_string(),
@@ -2608,9 +2827,22 @@ mod tests {
                 ),
             ]
             .into(),
+            standard_platforms: [(
+                key.to_string(),
+                UpdatePlatform {
+                    asset: "current.dmg".to_string(),
+                    url: "https://example.test/current.dmg".to_string(),
+                    sha256: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                        .to_string(),
+                    package: "standard-dmg".to_string(),
+                },
+            )]
+            .into(),
         };
 
-        let check = update_check_from_manifest("v0.5.0", &manifest);
+        let check = update_check_from_manifest("v0.5.0", &manifest, UpdatePackageKind::Portable);
+        let standard_check =
+            update_check_from_manifest("v0.5.0", &manifest, UpdatePackageKind::Standard);
 
         assert_eq!(check.availability, UpdateAvailability::UpdateAvailable);
         assert_eq!(check.current_version, "v0.5.0");
@@ -2619,6 +2851,10 @@ mod tests {
         assert_eq!(
             check.download_url,
             Some("https://example.test/current.zip".to_string())
+        );
+        assert_eq!(
+            standard_check.download_url,
+            Some("https://example.test/current.dmg".to_string())
         );
     }
 
@@ -2644,15 +2880,19 @@ mod tests {
             release_url: "https://example.test/release".to_string(),
             notes: String::new(),
             signature: None,
+            standard_signature: None,
             platforms: Default::default(),
+            standard_platforms: Default::default(),
         };
 
         assert_eq!(
-            update_check_from_manifest("v0.6.0", &manifest).availability,
+            update_check_from_manifest("v0.6.0", &manifest, UpdatePackageKind::Portable)
+                .availability,
             UpdateAvailability::UpToDate
         );
         assert_eq!(
-            update_check_from_manifest("local-build", &manifest).availability,
+            update_check_from_manifest("local-build", &manifest, UpdatePackageKind::Portable)
+                .availability,
             UpdateAvailability::UnknownCurrentVersion
         );
     }
@@ -2665,6 +2905,7 @@ mod tests {
             release_url: "https://example.test/release".to_string(),
             notes: String::new(),
             signature: None,
+            standard_signature: None,
             platforms: [(
                 current_update_platform_key().to_string(),
                 UpdatePlatform {
@@ -2676,17 +2917,26 @@ mod tests {
                 },
             )]
             .into(),
+            standard_platforms: Default::default(),
         };
 
-        let local_build_check = update_check_from_manifest("local-build", &manifest);
-        let up_to_date_check = update_check_from_manifest("v0.6.0", &manifest);
+        let local_build_check =
+            update_check_from_manifest("local-build", &manifest, UpdatePackageKind::Portable);
+        let up_to_date_check =
+            update_check_from_manifest("v0.6.0", &manifest, UpdatePackageKind::Portable);
 
         assert_eq!(
             local_build_check.availability,
             UpdateAvailability::UnknownCurrentVersion
         );
-        assert!(update_check_has_install_action(&local_build_check, true));
-        assert!(!update_check_has_install_action(&up_to_date_check, true));
+        assert!(update_check_has_install_action(
+            &local_build_check,
+            UpdateInstallAction::PortableUpdater
+        ));
+        assert!(!update_check_has_install_action(
+            &up_to_date_check,
+            UpdateInstallAction::PortableUpdater
+        ));
     }
 
     #[test]
@@ -2699,8 +2949,18 @@ mod tests {
             availability: UpdateAvailability::UpdateAvailable,
         };
 
-        assert!(!update_check_has_install_action(&check, false));
-        assert!(update_check_has_install_action(&check, true));
+        assert!(!update_check_has_install_action(
+            &check,
+            UpdateInstallAction::None
+        ));
+        assert!(update_check_has_install_action(
+            &check,
+            UpdateInstallAction::PortableUpdater
+        ));
+        assert!(update_check_has_install_action(
+            &check,
+            UpdateInstallAction::DownloadPackage
+        ));
     }
 
     #[test]

@@ -126,14 +126,14 @@ http://127.0.0.1:8787/
 ## 应用包下载
 
 当前可用的标准包和一键包见 [下载 / Releases](RELEASES.md)，也可以直接打开
-[GitHub Release v0.5.6](https://github.com/kadevin/ilab-gpt-conjure/releases/tag/v0.5.6)。
+[GitHub Release v0.5.7](https://github.com/kadevin/ilab-gpt-conjure/releases/tag/v0.5.7)。
 
 新用户建议优先下载标准包：
 
-1. macOS：Apple Silicon 下载 `iLab-GPT-CONJURE-macos-arm64-0.5.6.dmg`，
-   Intel 下载 `iLab-GPT-CONJURE-macos-x64-0.5.6.dmg`，然后把
+1. macOS：Apple Silicon 下载 `iLab-GPT-CONJURE-macos-arm64-0.5.7.dmg`，
+   Intel 下载 `iLab-GPT-CONJURE-macos-x64-0.5.7.dmg`，然后把
    `iLab GPT CONJURE.app` 拖到 Applications。
-2. Windows：下载 `iLab-GPT-CONJURE-windows-x64_0.5.6.zip`，
+2. Windows：下载 `iLab-GPT-CONJURE-windows-x64_0.5.7.zip`，
    解压到普通用户目录，双击 `iLab GPT CONJURE.exe`。
 
 标准包的用户数据会写入 macOS 的
@@ -188,8 +188,8 @@ SQLite 数据库或日志提交回 Git。
 应用包打包和 CI 明确分离：`Portable Release` workflow 只会在 `CI` workflow 于
 `main` push 上成功完成后运行，并生成标准包、portable 包和 SHA256 文件作为
 workflow artifact。如果该提交带有 `v*` tag，release job 还会使用
-`ILAB_CONJURE_UPDATE_SIGNING_PRIVATE_KEY_B64` secret 生成仅供 portable 自动更新使用的
-signed `latest.json`，并把所有安装包、SHA256 文件与更新 manifest 上传到对应
+`ILAB_CONJURE_UPDATE_SIGNING_PRIVATE_KEY_B64` secret 生成 signed `latest.json`，
+并把所有安装包、SHA256 文件与更新 manifest 上传到对应
 GitHub Release。对于已经通过 CI 的 tag，也可以手动运行同一个 workflow，并填写
 `ref` 与 `release_tag`。
 

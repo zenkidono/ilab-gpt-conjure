@@ -77,6 +77,10 @@ class UpdateManifestTests(unittest.TestCase):
                 set(manifest["platforms"]),
                 {"darwin-aarch64", "darwin-x86_64", "windows-x86_64"},
             )
+            self.assertEqual(
+                set(manifest["standard_platforms"]),
+                {"darwin-aarch64", "darwin-x86_64", "windows-x86_64"},
+            )
             windows = manifest["platforms"]["windows-x86_64"]
             self.assertEqual(
                 windows["url"],
@@ -84,9 +88,18 @@ class UpdateManifestTests(unittest.TestCase):
             )
             self.assertEqual(windows["package"], "portable-zip")
             self.assertRegex(windows["sha256"], r"^[0-9a-f]{64}$")
-            manifest_text = json.dumps(manifest, ensure_ascii=False)
-            self.assertNotIn("iLab-GPT-CONJURE-windows-x64_0.6.0.zip", manifest_text)
-            self.assertNotIn("iLab-GPT-CONJURE-macos-arm64-0.6.0.dmg", manifest_text)
+            windows_app = manifest["standard_platforms"]["windows-x86_64"]
+            self.assertEqual(windows_app["package"], "standard-zip")
+            self.assertEqual(
+                windows_app["url"],
+                "https://github.com/kadevin/ilab-gpt-conjure/releases/download/v0.6.0/iLab-GPT-CONJURE-windows-x64_0.6.0.zip",
+            )
+            mac_app = manifest["standard_platforms"]["darwin-aarch64"]
+            self.assertEqual(mac_app["package"], "standard-dmg")
+            self.assertEqual(
+                mac_app["url"],
+                "https://github.com/kadevin/ilab-gpt-conjure/releases/download/v0.6.0/iLab-GPT-CONJURE-macos-arm64-0.6.0.dmg",
+            )
 
     def test_build_update_manifest_can_sign_with_ed25519_private_key(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -103,6 +116,9 @@ class UpdateManifestTests(unittest.TestCase):
                 "ilab-gpt-conjure_windows_portable_x64_0.6.0.zip": b"windows",
                 "ilab-gpt-conjure_macos_portable_arm64_0.6.0.zip": b"mac arm",
                 "ilab-gpt-conjure_macos_portable_x64_0.6.0.zip": b"mac intel",
+                "iLab-GPT-CONJURE-windows-x64_0.6.0.zip": b"windows app",
+                "iLab-GPT-CONJURE-macos-arm64-0.6.0.dmg": b"mac app arm",
+                "iLab-GPT-CONJURE-macos-x64-0.6.0.dmg": b"mac app intel",
             }
             for name, payload in assets.items():
                 path = assets_dir / name
@@ -136,6 +152,9 @@ class UpdateManifestTests(unittest.TestCase):
             signature = manifest["signature"]
             self.assertEqual(signature["algorithm"], "ed25519")
             self.assertRegex(signature["value"], r"^[A-Za-z0-9+/=]+$")
+            standard_signature = manifest["standard_signature"]
+            self.assertEqual(standard_signature["algorithm"], "ed25519")
+            self.assertRegex(standard_signature["value"], r"^[A-Za-z0-9+/=]+$")
 
             private_key_path.write_bytes(
                 __import__("base64").b64decode(self.TEST_PRIVATE_KEY_PEM_B64)
@@ -164,6 +183,25 @@ class UpdateManifestTests(unittest.TestCase):
                 check=True,
                 stdout=subprocess.DEVNULL,
             )
+            payload_path.write_bytes(self._standard_manifest_signing_payload(manifest))
+            signature_path.write_bytes(__import__("base64").b64decode(standard_signature["value"]))
+            subprocess.run(
+                [
+                    "openssl",
+                    "pkeyutl",
+                    "-verify",
+                    "-rawin",
+                    "-pubin",
+                    "-inkey",
+                    str(public_key_path),
+                    "-sigfile",
+                    str(signature_path),
+                    "-in",
+                    str(payload_path),
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
 
     def test_build_update_manifest_requires_signature_when_requested(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -174,6 +212,9 @@ class UpdateManifestTests(unittest.TestCase):
                 "ilab-gpt-conjure_windows_portable_x64_0.6.0.zip",
                 "ilab-gpt-conjure_macos_portable_arm64_0.6.0.zip",
                 "ilab-gpt-conjure_macos_portable_x64_0.6.0.zip",
+                "iLab-GPT-CONJURE-windows-x64_0.6.0.zip",
+                "iLab-GPT-CONJURE-macos-arm64-0.6.0.dmg",
+                "iLab-GPT-CONJURE-macos-x64-0.6.0.dmg",
             ):
                 path = assets_dir / name
                 path.write_bytes(b"payload")
@@ -221,6 +262,26 @@ class UpdateManifestTests(unittest.TestCase):
         for key, entry in sorted(platforms.items()):
             assert isinstance(entry, dict)
             field("platform", key)
+            for field_name in ("asset", "url", "sha256", "package"):
+                field(field_name, entry[field_name])
+        return ("\n".join(lines) + "\n").encode("utf-8")
+
+    @staticmethod
+    def _standard_manifest_signing_payload(manifest: dict[str, object]) -> bytes:
+        lines = ["ilab-gpt-conjure-standard-update-manifest-v1"]
+
+        def field(name: str, value: object) -> None:
+            text = str(value)
+            lines.append(f"{name}:{len(text.encode('utf-8'))}:{text}")
+
+        field("schema_version", manifest["schema_version"])
+        field("version", manifest["version"])
+        field("release_url", manifest["release_url"])
+        platforms = manifest["standard_platforms"]
+        assert isinstance(platforms, dict)
+        for key, entry in sorted(platforms.items()):
+            assert isinstance(entry, dict)
+            field("standard_platform", key)
             for field_name in ("asset", "url", "sha256", "package"):
                 field(field_name, entry[field_name])
         return ("\n".join(lines) + "\n").encode("utf-8")

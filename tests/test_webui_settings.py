@@ -73,7 +73,15 @@ class WebUISettingsTests(unittest.TestCase):
         from codex_image.version import APP_VERSION
         from codex_image.webui.app import create_app
 
-        with patch.dict(os.environ, {"ILAB_CONJURE_BUNDLE_DIR": "", "ILAB_CONJURE_DATA_DIR": ""}):
+        with patch.dict(
+            os.environ,
+            {
+                "APP_LAUNCHER_MODE": "",
+                "ILAB_CONJURE_APP_DIR": "",
+                "ILAB_CONJURE_BUNDLE_DIR": "",
+                "ILAB_CONJURE_DATA_DIR": "",
+            },
+        ):
             app = create_app(output_root=Path(tempfile.mkdtemp()), auto_start_queue=False)
             response = TestClient(app).get("/api/app-version")
 
@@ -81,10 +89,64 @@ class WebUISettingsTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["current_version"], APP_VERSION)
         self.assertEqual(payload["current_version_label"], f"v{APP_VERSION}")
+        self.assertEqual(payload["source"], "source")
         self.assertFalse(payload["portable"])
+        self.assertFalse(payload["standard_app"])
         self.assertFalse(payload["update_available"])
         self.assertFalse(payload["updater_available"])
         self.assertIsNone(payload["post_update_onboarding"])
+
+    def test_app_version_reports_standard_app_version_and_download_notice(self) -> None:
+        from codex_image.webui.app import create_app
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            app_dir = root / "iLab GPT CONJURE.app" / "Contents" / "Resources" / "app"
+            resources_dir = app_dir.parent
+            data_dir = root / "data"
+            output_root = data_dir / "webui-outputs"
+            app_dir.mkdir(parents=True)
+            data_dir.mkdir()
+            output_root.mkdir()
+            (resources_dir / "app-version.txt").write_text("0.5.5\n", encoding="utf-8")
+            (data_dir / "update-notice.json").write_text(
+                json.dumps(
+                    {
+                        "current_version": "0.5.5",
+                        "latest_version": "0.5.6",
+                        "checked_at": "2026-07-08T00:00:00Z",
+                        "release_url": "https://github.com/kadevin/ilab-gpt-conjure/releases/tag/v0.5.6",
+                        "download_url": "https://example.test/iLab-GPT-CONJURE-macos-arm64-0.5.6.dmg",
+                        "standard_download_url": "https://example.test/iLab-GPT-CONJURE-macos-arm64-0.5.6.dmg",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch.dict(
+                os.environ,
+                {
+                    "APP_LAUNCHER_MODE": "standard",
+                    "ILAB_CONJURE_APP_DIR": str(app_dir),
+                    "ILAB_CONJURE_DATA_DIR": str(data_dir),
+                    "ILAB_CONJURE_BUNDLE_DIR": "",
+                },
+            ):
+                app = create_app(output_root=output_root, auto_start_queue=False)
+                response = TestClient(app).get("/api/app-version")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["source"], "standard_app")
+        self.assertFalse(payload["portable"])
+        self.assertTrue(payload["standard_app"])
+        self.assertEqual(payload["current_version"], "0.5.5")
+        self.assertEqual(payload["latest_version"], "0.5.6")
+        self.assertTrue(payload["update_available"])
+        self.assertFalse(payload["updater_available"])
+        self.assertEqual(
+            payload["standard_download_url"],
+            "https://example.test/iLab-GPT-CONJURE-macos-arm64-0.5.6.dmg",
+        )
 
     def test_app_version_reports_portable_update_notice(self) -> None:
         from codex_image.webui.app import create_app
@@ -113,14 +175,21 @@ class WebUISettingsTests(unittest.TestCase):
             )
             with patch.dict(
                 os.environ,
-                {"ILAB_CONJURE_BUNDLE_DIR": str(bundle_dir), "ILAB_CONJURE_DATA_DIR": str(data_dir)},
+                {
+                    "APP_LAUNCHER_MODE": "",
+                    "ILAB_CONJURE_APP_DIR": "",
+                    "ILAB_CONJURE_BUNDLE_DIR": str(bundle_dir),
+                    "ILAB_CONJURE_DATA_DIR": str(data_dir),
+                },
             ):
                 app = create_app(output_root=output_root, auto_start_queue=False)
                 response = TestClient(app).get("/api/app-version")
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
+        self.assertEqual(payload["source"], "portable")
         self.assertTrue(payload["portable"])
+        self.assertFalse(payload["standard_app"])
         self.assertEqual(payload["current_version"], "0.3.6")
         self.assertEqual(payload["latest_version"], "0.3.7")
         self.assertTrue(payload["update_available"])

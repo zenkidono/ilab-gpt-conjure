@@ -51,6 +51,24 @@ def _portable_bundle_dir() -> Path | None:
     return path if path.exists() else None
 
 
+def _standard_app_dir() -> Path | None:
+    if os.environ.get("APP_LAUNCHER_MODE") != "standard":
+        return None
+    raw = os.environ.get("ILAB_CONJURE_APP_DIR")
+    if not raw:
+        return None
+    path = Path(raw).expanduser()
+    return path if path.exists() else None
+
+
+def _runtime_source(bundle_dir: Path | None, app_dir: Path | None) -> str:
+    if bundle_dir is not None:
+        return "portable"
+    if app_dir is not None or os.environ.get("APP_LAUNCHER_MODE") == "standard":
+        return "standard_app"
+    return "source"
+
+
 def _data_dir_from_output_root(output_root: Path) -> Path | None:
     raw = os.environ.get("ILAB_CONJURE_DATA_DIR")
     if raw:
@@ -69,6 +87,22 @@ def _portable_version(bundle_dir: Path | None) -> str:
     except OSError:
         return APP_VERSION
     return _normalize_version(raw)
+
+
+def _standard_app_version(app_dir: Path | None) -> str:
+    if not app_dir:
+        return APP_VERSION
+    version_files = [
+        app_dir.parent / "app-version.txt",
+        app_dir / "app-version.txt",
+    ]
+    for version_file in version_files:
+        try:
+            raw = version_file.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        return _normalize_version(raw)
+    return APP_VERSION
 
 
 def _read_json_object(path: Path) -> dict[str, Any] | None:
@@ -96,6 +130,8 @@ def _read_update_notice(data_dir: Path | None, current_version: str) -> dict[str
         "latest_version_label": _version_tag(latest_version),
         "checked_at": payload.get("checked_at"),
         "release_url": payload.get("release_url") or f"{RELEASES_URL}/tag/{_version_tag(latest_version)}",
+        "download_url": str(payload.get("download_url") or "").strip() or None,
+        "standard_download_url": str(payload.get("standard_download_url") or "").strip() or None,
     }
 
 
@@ -150,8 +186,10 @@ def _updater_script(bundle_dir: Path | None) -> Path | None:
 
 def app_version_payload(output_root: Path) -> dict[str, Any]:
     bundle_dir = _portable_bundle_dir()
+    app_dir = _standard_app_dir()
     data_dir = _data_dir_from_output_root(output_root)
-    current_version = _portable_version(bundle_dir)
+    source = _runtime_source(bundle_dir, app_dir)
+    current_version = _portable_version(bundle_dir) if source == "portable" else _standard_app_version(app_dir)
     notice = _read_update_notice(data_dir, current_version)
     updater = _updater_script(bundle_dir)
     portable = bundle_dir is not None
@@ -160,13 +198,16 @@ def app_version_payload(output_root: Path) -> dict[str, Any]:
     return {
         "current_version": current_version,
         "current_version_label": _version_tag(current_version),
-        "source": "portable" if portable else "source",
+        "source": source,
         "portable": portable,
+        "standard_app": source == "standard_app",
         "update_available": bool(notice),
         "latest_version": latest_version,
         "latest_version_label": _version_tag(latest_version),
         "checked_at": notice.get("checked_at") if notice else None,
         "release_url": notice.get("release_url") if notice else RELEASES_URL,
+        "download_url": notice.get("download_url") if notice else None,
+        "standard_download_url": notice.get("standard_download_url") if notice else None,
         "updater_available": updater is not None,
         "updater_label": updater.name if updater else None,
         "post_update_onboarding": onboarding,
